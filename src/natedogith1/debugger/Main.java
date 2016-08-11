@@ -34,10 +34,10 @@ public class Main {
     if ( engine == null )
       throw new IllegalArgumentException("could not locate script engine");
     Bindings bindings = engine.getBindings(ScriptContext.ENGINE_SCOPE);
-    String instName = args.length >= 2 ? args[1] : "instrumentation";
+    String instName = args.length >= 2 ? args[1] : "";
     if ( ! instName.equals("") )
       bindings.put(instName, inst);
-    String argsName = args.length >= 3 ? args[2] : "arguments";
+    String argsName = args.length >= 3 ? args[2] : "";
     if ( ! argsName.equals("") )
       bindings.put(argsName, scriptArgs);
     engine.eval(new FileReader(scriptFile));
