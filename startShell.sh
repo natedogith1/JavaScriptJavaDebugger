@@ -1,0 +1,1 @@
+java -cp bin natedogith1.debugger.Main "./scripts/swingShell.js:inst:args;"
