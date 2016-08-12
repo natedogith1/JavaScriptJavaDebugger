@@ -22,6 +22,8 @@ Java.type("javax.swing.SwingUtilities").invokeLater(function(){
   var javaString = Java.type("java.lang.String");
   var DocumentListener = Java.type("javax.swing.event.DocumentListener");
   var Font = Java.type("java.awt.Font");
+  var SwingUtilities = Java.type("javax.swing.SwingUtilities");
+  var InputEvent = Java.type("java.awt.event.InputEvent");
   
   // actual code
   var frame = new JFrame("debugger shell");
@@ -62,10 +64,9 @@ Java.type("javax.swing.SwingUtilities").invokeLater(function(){
     getInput: function() { // get the input text, push it to the output, and clear the input
       var text = document_super.getText(this.outputEnd.getOffset() + prompt.length, document_super.getLength() - this.outputEnd.getOffset() - prompt.length);
       if ( this.isFirst ) { // first time the prompt doesn't have the \n
-        this.newLine = true; // insert text on new line, but \n at end of text means we get a line to ourselves
         this.outputText(document_super.getText(this.outputEnd.getOffset(), document_super.getLength() - this.outputEnd.getOffset()) + "\n");
       } else {
-        this.newLine = true;
+        this.isNewLine = true; // insert text on new line, but \n at end of text means we get a line to ourselves
         this.outputText(document_super.getText(this.outputEnd.getOffset() + 1, document_super.getLength() - this.outputEnd.getOffset() - 1) + "\n");
       }
       // clear the input
@@ -88,7 +89,7 @@ Java.type("javax.swing.SwingUtilities").invokeLater(function(){
   textArea.setFont(Font.getFont(Font.MONOSPACED));
   textArea.setLineWrap(true);
   var swingWorkerAdapter = Java.extend(SwingWorker);
-  var shellGlobal = {};
+  var shellGlobal = {abc:123}; // the 'this' used for evaling user input
   
   var history = { // handling of history
     node : function(prev, val, next) { // because linked lists are easier (?)
@@ -105,7 +106,9 @@ Java.type("javax.swing.SwingUtilities").invokeLater(function(){
     add: function(item) { // add an item to the most recent history and reset the iterator
       this.enforceLimit();
       this.lowDefault = null;
-      if ( this.limit == 0 ) {
+      if ( item == "" ) {
+        // do nothing
+      } else if ( this.limit == 0 ) {
         // do nothing
       } else if ( this.count == 0 ) {
         this.tail = new this.node(this.head,item,null);
@@ -169,11 +172,16 @@ Java.type("javax.swing.SwingUtilities").invokeLater(function(){
         event.consume();
       } else if ( event.getKeyCode() == KeyEvent.VK_LEFT ) { // can't move left past the begining of input
         if ( textArea.getCaretPosition() == documentObject.outputEnd.getOffset() + prompt.length ) {
+          if ( ! event.isShiftDown() )
+            textArea.setCaretPosition(textArea.getCaretPosition());
           event.consume();
         }
       } else if ( event.getKeyCode() == KeyEvent.VK_HOME ) { // home won't take you past the begining of input
         if ( textArea.getLineOfOffset(textArea.getCaretPosition()) == textArea.getLineOfOffset(documentObject.outputEnd.getOffset() + prompt.length) ) {
-          textArea.setCaretPosition(documentObject.outputEnd.getOffset() + prompt.length);
+          if ( event.isShiftDown() )
+            textArea.moveCaretPosition(documentObject.outputEnd.getOffset() + prompt.length);
+          else 
+            textArea.setCaretPosition(documentObject.outputEnd.getOffset() + prompt.length);
           event.consume();
         }
       } else if ( event.getKeyCode() == KeyEvent.VK_UP ) { // go up in history
@@ -187,6 +195,14 @@ Java.type("javax.swing.SwingUtilities").invokeLater(function(){
         var prev = history.getPrevious(cur);
         if ( prev != null && prev != cur )
           documentObject.setInput(prev);
+        event.consume();
+      } else if ( event.getKeyCode() == KeyEvent.VK_V ) {
+        if ( event.isControlDown() ) {
+          textArea.setCaretPosition(document.getLength());
+          // dont' consume, we want to paste
+        }
+      } else if ( event.getKeyCode() == KeyEvent.VK_ALT ) {
+        textArea.setCaretPosition(documentObject.outputEnd.getOffset());
         event.consume();
       }
         
@@ -236,8 +252,14 @@ Java.type("javax.swing.SwingUtilities").invokeLater(function(){
       else if (arguments.length == 3 )
         if ( a instanceof javaString )
           outWriter_super.write(a,b,c);
-        else
-          documentObject.outputText(new javaString(a,b,c));
+        else {
+          var tmp = new javaString(a,b,c) //+ ""; // this has to be outside of the invoked function
+          // I don't know why, but if stuck inside weird stuff starts hapening ( it seems like
+          // c is becoming 4 or something, causing an incorrect string to be passed)
+          SwingUtilities.invokeLater(function() {
+            documentObject.outputText(tmp);
+          });
+        }
       else{
         throw "invalid argument count [" + args.length + "]";
       }
