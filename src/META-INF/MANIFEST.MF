@@ -1,0 +1,7 @@
+Manifest-Version: 1.0
+Main-Class: natedogith1.debugger.Main
+Premain-Class: natedogith1.debugger.Main
+Agent-Class: natedogith1.debugger.Main
+Can-Redefine-Classes: true
+Can-Retransform-Classes: true
+Can-Set-Native-Method-Prefix: true
