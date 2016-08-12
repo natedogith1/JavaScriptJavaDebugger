@@ -247,26 +247,30 @@ Java.type("javax.swing.SwingUtilities").invokeLater(function(){
   var outWriter_super;
   var outWriter = new (Java.extend(Writer)){
     write: function(a,b,c) {
-      if ( arguments.length == 1 )
-        outWriter_super.write(a);
-      else if (arguments.length == 3 )
-        if ( a instanceof javaString )
-          outWriter_super.write(a,b,c);
+      oldPrint("abc");
+      Java.synchronized(function(){ // because Writer is synchronized 
+        oldPrint(arguments.length);
+        if ( arguments.length == 1 )
+          outWriter_super.write(a);
+        else if (arguments.length == 3 )
+          if ( a instanceof javaString )
+            outWriter_super.write(a,b,c);
+          else {
+            var tmp = new javaString(a,b,c); // this has to be here because the default Writer
+            // will re-use the char[] array, meaning we'll get incorrect results if we
+            // use the array after we return (as we do with invokeLater)
+            SwingUtilities.invokeLater(function() {
+              documentObject.outputText(tmp);
+            });
+          }
         else {
-          var tmp = new javaString(a,b,c) //+ ""; // this has to be outside of the invoked function
-          // I don't know why, but if stuck inside weird stuff starts hapening ( it seems like
-          // c is becoming 4 or something, causing an incorrect string to be passed)
-          SwingUtilities.invokeLater(function() {
-            documentObject.outputText(tmp);
-          });
+          throw "invalid argument count [" + args.length + "]";
         }
-      else{
-        throw "invalid argument count [" + args.length + "]";
-      }
+      },outWriter_super.lock).apply(this, arguments)
     },
     flush: function(){},
     close: function(){}
-  }
+  };
   outWriter_super = Java.super(outWriter);
   context.setReader(inReader);
   context.setWriter(outWriter);
