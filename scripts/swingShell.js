@@ -1,8 +1,27 @@
+//////////////////////////////////////////////////////
+//
+//  Program: an interactive interface for runing
+//      javascript code
+//
+//  Expected Arguments Name: args
+//
+//  Arguments: libraryPath;scriptFile
+//      libraryPath is the path that
+//        shell.loadLibrary uses
+//      scriptFile, if provided, is the name
+//        of a file to run when the shell is made
+//        if this file starts with a '!' then
+//        the code is run before this script returns
+//        otherwise the code is run after the console
+//        is made
+//
+//////////////////////////////////////////////////////
+
 "use strict";
 
 var libraryPath;
-if ( args.indexOf(":") >= 0 )
-  libraryPath = args.substring(0, args.indexOf(":"));
+if ( args.indexOf(";") >= 0 )
+  libraryPath = args.substring(0, args.indexOf(";"));
 else
   libraryPath = args;
 
@@ -355,4 +374,13 @@ Java.type("javax.swing.SwingUtilities").invokeLater(function(){
   frame.pack();
   frame.setVisible(true);
   
+  
+  var scriptName = args.substring(libraryPath.length + 1);
+  if ( scriptName != "" )
+    runFunction(function() {
+      load(scriptName);
+    });
 });
+
+if ( args.substring(libraryPath.length + 1).startsWith("!") )
+  load(args.substring(libraryPath.length + 2));
