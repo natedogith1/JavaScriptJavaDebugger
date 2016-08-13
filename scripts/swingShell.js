@@ -1,3 +1,5 @@
+"use strict";
+
 Java.type("javax.swing.SwingUtilities").invokeLater(function(){
   var oldWriter = context.getWriter();
   // method for easier debugging
@@ -24,6 +26,10 @@ Java.type("javax.swing.SwingUtilities").invokeLater(function(){
   var Font = Java.type("java.awt.Font");
   var SwingUtilities = Java.type("javax.swing.SwingUtilities");
   var InputEvent = Java.type("java.awt.event.InputEvent");
+  var PipedReader = Java.type("java.io.PipedReader");
+  var PipedWriter = Java.type("java.io.PipedWriter");
+  
+  var lineSeperator = Java.type("java.lang.System").getProperty("line.seperator");
   
   // actual code
   var frame = new JFrame("debugger shell");
@@ -33,15 +39,30 @@ Java.type("javax.swing.SwingUtilities").invokeLater(function(){
   var document_super;
   var prompt = "> ";
   var documentObject = {
+    realPrompt: "> ",
+    set prompt(text) {
+      document_super.remove( this.promptStart, this.realPrompt.length );
+      document_super.insertString( this.promptStart, text, null );
+      this.realPrompt = text;
+    },
+    get prompt() {
+      return this.realPrompt;
+    },
     outputEnd: null, // the location output gets prepended to
     isFirst: true, // handles not starting with a blank line
     isNewLine: false, // so things like print() don't make an extra emtpy line
+    get inputStart() {
+      return this.outputEnd.getOffset() + this.prompt.length + (this.isFirst ? 0 : 1 )
+    },
+    get promptStart() {
+      return this.outputEnd.getOffset() + (this.isFirst ? 0 : 1)
+    },
     insertString: function(offs, str, a) { // prevents editing the output
-      if ( offs >= this.outputEnd.getOffset() + prompt.length )
+      if ( offs >= this.inputStart )
         document_super.insertString(offs, str, a);
     },
     remove: function(offs, len) { // prevents editing the output
-      if ( offs >= this.outputEnd.getOffset() + prompt.length )
+      if ( offs >= this.inputStart )
         document_super.remove(offs, len);
     },
     outputText: function(text) { // writes text to the output
@@ -62,34 +83,31 @@ Java.type("javax.swing.SwingUtilities").invokeLater(function(){
       }
     },
     getInput: function() { // get the input text, push it to the output, and clear the input
-      var text = document_super.getText(this.outputEnd.getOffset() + prompt.length, document_super.getLength() - this.outputEnd.getOffset() - prompt.length);
-      if ( this.isFirst ) { // first time the prompt doesn't have the \n
-        this.outputText(document_super.getText(this.outputEnd.getOffset(), document_super.getLength() - this.outputEnd.getOffset()) + "\n");
-      } else {
+      var text = this.getInputCurrent();
+      if ( ! this.isFirst ) {
         this.isNewLine = true; // insert text on new line, but \n at end of text means we get a line to ourselves
-        this.outputText(document_super.getText(this.outputEnd.getOffset() + 1, document_super.getLength() - this.outputEnd.getOffset() - 1) + "\n");
       }
+      this.outputText(document_super.getText(this.promptStart, document_super.getLength() - this.promptStart) + "\n");
       // clear the input
-      document_super.remove(this.outputEnd.getOffset() + prompt.length, document_super.getLength() - this.outputEnd.getOffset() - prompt.length);
+      document_super.remove(this.inputStart, document_super.getLength() - this.inputStart);
       return text;
     },
     getInputCurrent: function() { // get input without clearing it, used for history
-      return document_super.getText(this.outputEnd.getOffset() + prompt.length, document_super.getLength() - this.outputEnd.getOffset() - prompt.length);
+      return document_super.getText(this.inputStart, document_super.getLength() - this.inputStart);
     },
     setInput: function(text) { // set the input, used for history
-      this.remove(this.outputEnd.getOffset() + prompt.length, document_super.getLength() - this.outputEnd.getOffset() - prompt.length);
-      this.insertString(this.outputEnd.getOffset() + prompt.length, text, null);
+      this.remove(this.inputStart, document_super.getLength() - this.inputStart);
+      this.insertString(this.inputStart, text, null);
     }
   };
   var document = new (Java.extend(PlainDocument))(documentObject);
   document_super = Java.super(document);
-  document_super.insertString(0, prompt, null);
+  document_super.insertString(0, documentObject.prompt, null);
   documentObject.outputEnd = document_super.createPosition(0);
   var textArea = new JTextArea(document, null, 20, 50);
   textArea.setFont(Font.getFont(Font.MONOSPACED));
   textArea.setLineWrap(true);
   var swingWorkerAdapter = Java.extend(SwingWorker);
-  var shellGlobal = {abc:123}; // the 'this' used for evaling user input
   
   var history = { // handling of history
     node : function(prev, val, next) { // because linked lists are easier (?)
@@ -155,33 +173,51 @@ Java.type("javax.swing.SwingUtilities").invokeLater(function(){
   }
   history.cur = history.tail = history.head = new history.node(null,null,null);
   
+  var currentCode = null;
+  var inWriter;
+  
   textArea.addKeyListener(new KeyListener(){
     keyPressed : function(event) {
       if ( event.getKeyCode() == KeyEvent.VK_ENTER ) { // comand-execution and history adding
-        var text = documentObject.getInput();
-        history.add(text);
-        (new swingWorkerAdapter() {
-          doInBackground: function() {
-            try {
-              eval.call(shellGlobal,text)
-            } catch( e ) {
-              print( e );
+        if ( ! currentCode ) {
+          var text = documentObject.getInput();
+          history.add(text);
+          currentCode = (new swingWorkerAdapter() {
+            doInBackground: function() {
+              try {
+                var tmp = eval; // give eval a different name, so that it executes in the global scope
+                tmp(text)
+              } catch( e ) {
+                print( e );
+              }
+            },
+            done: function() {
+              documentObject.prompt = "> ";
+              currentCode = null;
             }
-          }
-        }).execute();
-        event.consume();
+          })
+          documentObject.prompt = "";
+          resetReader();
+          currentCode.execute();
+          event.consume();
+        } else {
+          var text = documentObject.getInput();
+          inWriter.write(""+text);
+          inWriter.write(""+lineSeperator);
+          event.consume();
+        }
       } else if ( event.getKeyCode() == KeyEvent.VK_LEFT ) { // can't move left past the begining of input
-        if ( textArea.getCaretPosition() == documentObject.outputEnd.getOffset() + prompt.length ) {
+        if ( textArea.getCaretPosition() == documentObject.inputStart ) {
           if ( ! event.isShiftDown() )
             textArea.setCaretPosition(textArea.getCaretPosition());
           event.consume();
         }
       } else if ( event.getKeyCode() == KeyEvent.VK_HOME ) { // home won't take you past the begining of input
-        if ( textArea.getLineOfOffset(textArea.getCaretPosition()) == textArea.getLineOfOffset(documentObject.outputEnd.getOffset() + prompt.length) ) {
+        if ( textArea.getLineOfOffset(textArea.getCaretPosition()) == textArea.getLineOfOffset(documentObject.inputStart) ) {
           if ( event.isShiftDown() )
-            textArea.moveCaretPosition(documentObject.outputEnd.getOffset() + prompt.length);
+            textArea.moveCaretPosition(documentObject.inputStart);
           else 
-            textArea.setCaretPosition(documentObject.outputEnd.getOffset() + prompt.length);
+            textArea.setCaretPosition(documentObject.inputStart);
           event.consume();
         }
       } else if ( event.getKeyCode() == KeyEvent.VK_UP ) { // go up in history
@@ -197,7 +233,7 @@ Java.type("javax.swing.SwingUtilities").invokeLater(function(){
           documentObject.setInput(prev);
         event.consume();
       } else if ( event.getKeyCode() == KeyEvent.VK_V ) {
-        if ( event.isControlDown() ) {
+        if ( event.isControlDown() && textArea.getCaretPosition < documentObject.inputStart ) {
           textArea.setCaretPosition(document.getLength());
           // dont' consume, we want to paste
         }
@@ -211,7 +247,7 @@ Java.type("javax.swing.SwingUtilities").invokeLater(function(){
       // nothing here right now
     },
     keyTyped : function(event) { // return user to input area when they start typing
-      if ( textArea.getCaretPosition() < documentObject.outputEnd.getOffset() + prompt.length )
+      if ( textArea.getCaretPosition() < documentObject.inputStart )
         textArea.setCaretPosition(document.getLength());
     }
   });
@@ -220,7 +256,7 @@ Java.type("javax.swing.SwingUtilities").invokeLater(function(){
       // don't know what to do in this case
     },
     insertUpdate: function(event) {
-      if ( textArea.getCaretPosition() > event.getOffset() )
+      if ( textArea.getCaretPosition() >= event.getOffset() )
         textArea.setCaretPosition( textArea.getCaretPosition() + event.getLength() );
     },
     removeUpdate: function(event) {
@@ -237,11 +273,12 @@ Java.type("javax.swing.SwingUtilities").invokeLater(function(){
   var scrollPane = new JScrollPane(textArea, ScrollPaneConstants.VERTICAL_SCROLLBAR_ALWAYS, ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
   frame.add(scrollPane, null);
   
-  var inReader = new (Java.extend(Reader)){
-    read: function() {
-      throw new UnsupportedOperationException("in stream not implemented");
-    },
-    close: function(){}
+  inWriter = new PipedWriter(); // declared above addKeyListener
+  function resetReader() {
+    inWriter.close();
+    var inReader = new PipedReader();
+    inWriter = new PipedWriter(inReader);
+    context.setReader(inReader);
   };
   
   var outWriter_super;
@@ -268,9 +305,9 @@ Java.type("javax.swing.SwingUtilities").invokeLater(function(){
     close: function(){}
   };
   outWriter_super = Java.super(outWriter);
-  context.setReader(inReader);
   context.setWriter(outWriter);
   context.setErrorWriter(outWriter);
+  resetReader();
   
   frame.pack();
   frame.setVisible(true);
