@@ -233,13 +233,19 @@ Java.type("javax.swing.SwingUtilities").invokeLater(function(){
           documentObject.setInput(prev);
         event.consume();
       } else if ( event.getKeyCode() == KeyEvent.VK_V ) {
-        if ( event.isControlDown() && textArea.getCaretPosition < documentObject.inputStart ) {
-          textArea.setCaretPosition(document.getLength());
-          // dont' consume, we want to paste
+        if ( event.isControlDown() ) {
+          if ( textArea.getCaretPosition < documentObject.inputStart ) {
+            textArea.setCaretPosition(document.getLength());
+            // dont' consume, we want to paste
+          }
         }
-      } else if ( event.getKeyCode() == KeyEvent.VK_ALT ) {
-        textArea.setCaretPosition(documentObject.outputEnd.getOffset());
-        event.consume();
+      } else if ( event.getKeyCode() == KeyEvent.VK_C ) {
+        if ( event.isControlDown() ) {
+          if ( currentCode != null ) {
+            currentCode.cancel(true);
+          }
+          event.consume();
+        }
       }
         
     },
