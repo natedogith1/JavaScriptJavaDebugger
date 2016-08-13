@@ -1,5 +1,31 @@
 "use strict";
 
+var libraryPath;
+if ( args.indexOf(":") >= 0 )
+  libraryPath = args.substring(0, args.indexOf(":"));
+else
+  libraryPath = args;
+
+var shell = {
+  loadedLibraries: {},
+  getLibraryPath: function(name) {
+    var File = Java.type("java.io.File");
+    var arr = name.toString().split(".");
+    arr[arr.length-1] += ".js";
+    return arr.reduce(function(prev,cur) {
+      return new File(prev, cur);
+    }, new File(libraryPath)).getPath();
+  },
+  loadLibrary: function(name) {
+    if ( typeof this.loadedLibraries[name] == "undefined" )
+      this.loadedLibraries[name] = load(this.getLibraryPath(name));
+    return this.loadedLibraries[name];
+  },
+  unloadLibrary: function(name) {
+    delete this.loadedLibraries[name]
+  }
+}
+
 Java.type("javax.swing.SwingUtilities").invokeLater(function(){
   var oldWriter = context.getWriter();
   // method for easier debugging
@@ -28,12 +54,14 @@ Java.type("javax.swing.SwingUtilities").invokeLater(function(){
   var InputEvent = Java.type("java.awt.event.InputEvent");
   var PipedReader = Java.type("java.io.PipedReader");
   var PipedWriter = Java.type("java.io.PipedWriter");
+  var WindowConstants = Java.type("javax.swing.WindowConstants");
+  var System = Java.type("java.lang.System");
   
   var lineSeperator = Java.type("java.lang.System").getProperty("line.seperator");
   
   // actual code
   var frame = new JFrame("debugger shell");
-  frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+  frame.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
   
   // document that handles things
   var document_super;
@@ -107,7 +135,6 @@ Java.type("javax.swing.SwingUtilities").invokeLater(function(){
   var textArea = new JTextArea(document, null, 20, 50);
   textArea.setFont(Font.getFont(Font.MONOSPACED));
   textArea.setLineWrap(true);
-  var swingWorkerAdapter = Java.extend(SwingWorker);
   
   var history = { // handling of history
     node : function(prev, val, next) { // because linked lists are easier (?)
@@ -173,8 +200,26 @@ Java.type("javax.swing.SwingUtilities").invokeLater(function(){
   }
   history.cur = history.tail = history.head = new history.node(null,null,null);
   
+  
   var currentCode = null;
   var inWriter;
+  var swingWorkerAdapter = Java.extend(SwingWorker);
+  // makes the text area process input rather than execute code
+  // used to evaluate user-inputed code
+  function runFunction(func) {
+    var oldPrompt = documentObject.prompt;
+    currentCode = new swingWorkerAdapter() {
+      doInBackground: func,
+      done: function() {
+        inWriter.close()
+        documentObject.prompt = oldPrompt;
+        currentCode = null;
+      }
+    };
+    documentObject.prompt = "";
+    resetReader();
+    currentCode.execute();
+  };
   
   textArea.addKeyListener(new KeyListener(){
     keyPressed : function(event) {
@@ -182,28 +227,21 @@ Java.type("javax.swing.SwingUtilities").invokeLater(function(){
         if ( ! currentCode ) {
           var text = documentObject.getInput();
           history.add(text);
-          currentCode = (new swingWorkerAdapter() {
-            doInBackground: function() {
-              try {
-                var tmp = eval; // give eval a different name, so that it executes in the global scope
-                tmp(text)
-              } catch( e ) {
-                print( e );
-              }
-            },
-            done: function() {
-              documentObject.prompt = "> ";
-              currentCode = null;
+          runFunction(function() {
+            try {
+              var tmp = eval; // give eval a different name, so that it executes in the global context
+              var res = tmp(text);
+              if ( typeof res != "undefined" )
+                print(res);
+            } catch( e ) {
+              print( e );
             }
-          })
-          documentObject.prompt = "";
-          resetReader();
-          currentCode.execute();
+          });
           event.consume();
         } else {
           var text = documentObject.getInput();
           inWriter.write(""+text);
-          inWriter.write(""+lineSeperator);
+          inWriter.write(""+System.getProperty("line.seperator"));
           event.consume();
         }
       } else if ( event.getKeyCode() == KeyEvent.VK_LEFT ) { // can't move left past the begining of input
@@ -239,7 +277,7 @@ Java.type("javax.swing.SwingUtilities").invokeLater(function(){
             // dont' consume, we want to paste
           }
         }
-      } else if ( event.getKeyCode() == KeyEvent.VK_C ) {
+      } else if ( event.getKeyCode() == KeyEvent.VK_C ) { // stop running code
         if ( event.isControlDown() ) {
           if ( currentCode != null ) {
             currentCode.cancel(true);
@@ -257,7 +295,7 @@ Java.type("javax.swing.SwingUtilities").invokeLater(function(){
         textArea.setCaretPosition(document.getLength());
     }
   });
-  document.addDocumentListener(new (Java.extend(DocumentListener)){
+  /*document.addDocumentListener(new (Java.extend(DocumentListener)){
     changeUpdate: function(event) {
       // don't know what to do in this case
     },
@@ -274,14 +312,13 @@ Java.type("javax.swing.SwingUtilities").invokeLater(function(){
           textArea.setCaretPosition( event.getOffset() );
       }
     }
-  });
+  });*/ // not sure why I needed this is the first place.
   textArea.setCaretPosition(document.getLength());
   var scrollPane = new JScrollPane(textArea, ScrollPaneConstants.VERTICAL_SCROLLBAR_ALWAYS, ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
   frame.add(scrollPane, null);
   
   inWriter = new PipedWriter(); // declared above addKeyListener
   function resetReader() {
-    inWriter.close();
     var inReader = new PipedReader();
     inWriter = new PipedWriter(inReader);
     context.setReader(inReader);
@@ -317,4 +354,5 @@ Java.type("javax.swing.SwingUtilities").invokeLater(function(){
   
   frame.pack();
   frame.setVisible(true);
+  
 });
