@@ -4,6 +4,8 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.lang.instrument.Instrumentation;
+import java.util.regex.Pattern;
+import java.util.regex.Matcher;
 import javax.script.Bindings;
 import javax.script.ScriptContext;
 import javax.script.ScriptEngine;
@@ -11,17 +13,20 @@ import javax.script.ScriptEngineManager;
 import javax.script.ScriptException;
 
 public class Main {
+  public static final String FORMAT_OUTPUT = "scriptFile:instrumentationName:argsName:engineName;scriptArguments";
+  
   public static void startup(String agentArgs, Instrumentation inst) throws FileNotFoundException, ScriptException {
     // scriptFile:instrumentationName:argsName:engineName;args
-    int scriptArgsIndex = agentArgs.indexOf(';');
-    String scriptArgs = scriptArgsIndex > 0 ? agentArgs.substring(scriptArgsIndex + 1) : "";
-    String[] args = agentArgs.substring(0,scriptArgsIndex).split(":", 3);
-    if ( args.length < 1 )
+    Matcher mat = Pattern.compile("^(?<scriptFile>[^:]*):(?<instName>[^:]*):(?<argsName>[^:]*):(?<engineName>[^;]*);(?<scriptArgs>.*)$").matcher(agentArgs);
+    if ( ! mat.find() ) {
+      throw new IllegalArgumentException("expected arguments to be of form \"" + FORMAT_OUTPUT + "\"");
+    }
+    if ( mat.group("scriptFile").equals("") )
       throw new IllegalArgumentException("no script file provided");
-    File scriptFile = new File(args[0]);
+    File scriptFile = new File(mat.group("scriptFile"));
     ScriptEngine engine;
-    if ( args.length >= 4 ) {
-      engine = new ScriptEngineManager().getEngineByName(args[3]);
+    if ( ! mat.group("engineName").equals("") ) {
+      engine = new ScriptEngineManager().getEngineByName(mat.group("engineName"));
     } else {
       int extensionPos = scriptFile.getName().lastIndexOf(".");
       String extension;
@@ -34,12 +39,10 @@ public class Main {
     if ( engine == null )
       throw new IllegalArgumentException("could not locate script engine");
     Bindings bindings = engine.getBindings(ScriptContext.ENGINE_SCOPE);
-    String instName = args.length >= 2 ? args[1] : "";
-    if ( ! instName.equals("") )
-      bindings.put(instName, inst);
-    String argsName = args.length >= 3 ? args[2] : "";
-    if ( ! argsName.equals("") )
-      bindings.put(argsName, scriptArgs);
+    if ( ! mat.group("instName").equals("") )
+      bindings.put(mat.group("instName"), inst);
+    if ( ! mat.group("argsName").equals("") )
+      bindings.put(mat.group("argsName"), mat.group("scriptArgs"));
     engine.eval(new FileReader(scriptFile));
   }
   
@@ -52,11 +55,20 @@ public class Main {
   }
   
   public static void main(String... args) throws FileNotFoundException, ScriptException {
+    if ( args[0].equals("--help") ) {
+      System.out.println("format: " + FORMAT_OUTPUT);
+      System.out.println("blank values will be interpreted as either none or automatic, as appropriate");
+      return;
+    }
     StringBuffer str = new StringBuffer();
     for ( String arg : args ) {
       str.append(" ");
       str.append(arg);
     }
-    startup(str.substring(1), null);
+    try { 
+      startup(str.substring(1), null);
+    } catch (IllegalArgumentException e) {
+      System.out.println(e.getMessage());
+    }
   }
 }
