@@ -247,26 +247,22 @@ Java.type("javax.swing.SwingUtilities").invokeLater(function(){
   var outWriter_super;
   var outWriter = new (Java.extend(Writer)){
     write: function(a,b,c) {
-      oldPrint("abc");
-      Java.synchronized(function(){ // because Writer is synchronized 
-        oldPrint(arguments.length);
-        if ( arguments.length == 1 )
-          outWriter_super.write(a);
-        else if (arguments.length == 3 )
-          if ( a instanceof javaString )
-            outWriter_super.write(a,b,c);
-          else {
-            var tmp = new javaString(a,b,c); // this has to be here because the default Writer
-            // will re-use the char[] array, meaning we'll get incorrect results if we
-            // use the array after we return (as we do with invokeLater)
-            SwingUtilities.invokeLater(function() {
-              documentObject.outputText(tmp);
-            });
-          }
+      if ( arguments.length == 1 )
+        outWriter_super.write(a);
+      else if (arguments.length == 3 )
+        if ( a instanceof javaString )
+          outWriter_super.write(a,b,c);
         else {
-          throw "invalid argument count [" + args.length + "]";
+          var tmp = new javaString(a,b,c); // this has to be here because the default Writer
+          // will re-use the char[] array, meaning we'll get incorrect results if we
+          // use the array after we return (as we do with invokeLater)
+          SwingUtilities.invokeLater(function() {
+            documentObject.outputText(tmp);
+          });
         }
-      },outWriter_super.lock).apply(this, arguments)
+      else {
+        throw "invalid argument count [" + args.length + "]";
+      }
     },
     flush: function(){},
     close: function(){}
