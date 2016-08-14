@@ -36,7 +36,7 @@ var shell = {
     }, new File(libraryPath)).getPath();
   },
   loadLibrary: function(name) {
-    if ( typeof this.loadedLibraries[name] == "undefined" )
+    if ( ! (name in this.loadedLibraries) )
       this.loadedLibraries[name] = load(this.getLibraryPath(name));
     return this.loadedLibraries[name];
   },

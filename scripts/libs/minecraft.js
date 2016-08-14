@@ -40,7 +40,7 @@ var minecraft = {
   fields.forEach(function(line) {
     var parts = line.split(",");
     minecraft.fields[parts[0]] = parts[1];
-    if ( typeof minecraft.revFields[parts[1]] == "undefined" )
+    if ( ! (parts[1] in minecreaft.revFields) )
       minecraft.revFields[parts[1]] = [];
     minecraft.revFields[parts[1]].push(parts[0]);
   });
@@ -52,7 +52,7 @@ var minecraft = {
   methods.forEach(function(line) {
     var parts = line.split(",");
     minecraft.methods[parts[0]] = parts[1];
-    if ( typeof minecraft.revMethods[parts[1]] == "undefined" )
+    if ( ! (parts[1] in minecraft.revMethods) )
       minecraft.revMethods[parts[1]] = [];
     minecraft.revMethods[parts[1]].push(parts[0]);
   });
@@ -68,19 +68,19 @@ var minecraft = {
     return new JSAdapter({
       getRealKey: function(key) {
         var tmp;
-        if ( typeof obj[key] == "undefined") {
-          if ( typeof minecraft.revFields[key] != "undefined" ) {
+        if ( ! (key in obj) ) {
+          if ( key in minecraft.revFields ) {
             tmp = minecraft.revFields[key].filter(function(key2){
-              return typeof obj[key2] != "undefined";
+              return key2 in obj;
             });
             if ( tmp.length > 1 )
               print("Found multiple mappings for " + key);
             if ( tmp.length > 0 )
               return tmp[0]
           }
-          if ( typeof minecraft.revMethods[key] != "undefined" ) {
+          if ( key in minecraft.revMethods ) {
             tmp = minecraft.revMethods[key].filter(function(key2){
-              return typeof obj[key2] != "undefined";
+              return key2 in obj;
             });
             if ( tmp.length > 1 )
               print("Found multiple mappings for " + key);
@@ -109,9 +109,9 @@ var minecraft = {
       __getIds__ : function() {
         var arr = [];
         for ( key in obj ) {
-          if ( typeof minecraft.fields[key] != "undefined" ) {
+          if ( key in minecraft.fields) {
             arr.push(minecraft.fields[key]);
-          } else if ( typeof minecraft.methods[key] != "undefined" ) {
+          } else if ( key in minecraft.methods ) {
             arr.push(minecraft.methods[key]);
           } else {
             arr.push(key);
@@ -130,7 +130,7 @@ var minecraft = {
         return e;
       },
       __has__ : function(key) {
-        return typeof this.getRealKey(key) != "undefined";
+        return this.getRealKey(key) in obj;
       },
       __delete__ : function(key, strict) {
         return delete obj[key]
