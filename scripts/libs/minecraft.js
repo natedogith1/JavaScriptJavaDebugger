@@ -1,16 +1,15 @@
 "use strict";
 
-var minecraft = {
-  fields: null, // contains srg field -> name field mapping
-  revFields: null, // contains name field -> srg field[]
-  methods: null, // contains srg method -> name method mapping
-  revMethods: null, // contains name mehtod -> srg method[]
-  wrapedName: "wrapedMinecraftObject", // name of the field that the object is stored when using minecraft.to(object)
-  from: null, // unwraps object
-  to: null, //wraps object
-};
-
 (function(){
+  var minecraft = {
+    fields: null, // contains srg field -> name field mapping
+    revFields: null, // contains name field -> srg field[]
+    methods: null, // contains srg method -> name method mapping
+    revMethods: null, // contains name mehtod -> srg method[]
+    wrapedName: "wrapedMinecraftObject", // name of the field that the object is stored when using minecraft.to(object)
+    from: null, // unwraps object
+    to: null, //wraps object
+  };
   var mcpLocation = "C:\\Users\\Nathan\\Desktop\\mcp\\";
   
   var File = Java.type("java.io.File");
@@ -154,10 +153,13 @@ var minecraft = {
         return obj.isFrozen.apply(obj, arguments);
       }
     });
-  }
+  };
   minecraft.to = function(obj) {
     if ( primitiveTypes[typeof obj] || obj === null )
       return obj; // return primitives unmodified
-    return obj[minecraft.wrapedName];
-  }
+    if ( minecraft.wrapedName in obj )
+      return obj[minecraft.wrapedName];
+    return obj
+  };
+  return minecraft;
 })();
