@@ -1,1 +1,1 @@
-java -cp bin natedogith1.debugger.Main "./test/print.js::args:;test123"
+java -cp bin natedogith1.debugger.Main "./test/print.js;:args:;test123"
