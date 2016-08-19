@@ -13,11 +13,11 @@ import javax.script.ScriptEngineManager;
 import javax.script.ScriptException;
 
 public class Main {
-  public static final String FORMAT_OUTPUT = "scriptFile:instrumentationName:argsName:engineName;scriptArguments";
+  public static final String FORMAT_OUTPUT = "scriptFile;instrumentationName:argsName:engineName;scriptArguments";
   
   public static void startup(String agentArgs, Instrumentation inst) throws FileNotFoundException, ScriptException {
-    // scriptFile:instrumentationName:argsName:engineName;args
-    Matcher mat = Pattern.compile("^(?<scriptFile>[^:]*):(?<instName>[^:]*):(?<argsName>[^:]*):(?<engineName>[^;]*);(?<scriptArgs>.*)$").matcher(agentArgs);
+    // scriptFile;instrumentationName:argsName:engineName;args
+    Matcher mat = Pattern.compile("^(?<scriptFile>[^;]*);(?<instName>[^:]*):(?<argsName>[^:]*):(?<engineName>[^;]*);(?<scriptArgs>.*)$").matcher(agentArgs);
     if ( ! mat.find() ) {
       throw new IllegalArgumentException("expected arguments to be of form \"" + FORMAT_OUTPUT + "\"");
     }
