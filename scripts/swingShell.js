@@ -282,12 +282,14 @@ Java.type("javax.swing.SwingUtilities").invokeLater(function(){
         var next = history.getNext(cur);
         if ( next != null && next != cur )
           documentObject.setInput(next);
+        textArea.setCaretPosition(document.getLength());
         event.consume();
       } else if ( event.getKeyCode() == KeyEvent.VK_DOWN ) { // go down in history
         var cur = documentObject.getInputCurrent();
         var prev = history.getPrevious(cur);
         if ( prev != null && prev != cur )
           documentObject.setInput(prev);
+        textArea.setCaretPosition(document.getLength());
         event.consume();
       } else if ( event.getKeyCode() == KeyEvent.VK_V ) {
         if ( event.isControlDown() ) {
@@ -296,13 +298,13 @@ Java.type("javax.swing.SwingUtilities").invokeLater(function(){
             // dont' consume, we want to paste
           }
         }
-      } else if ( event.getKeyCode() == KeyEvent.VK_C ) { // stop running code
-        if ( event.isControlDown() ) {
+      } else if ( event.getKeyCode() == KeyEvent.VK_ESCAPE ) { // stop running code
+        //if ( event.isControlDown() ) { // used to be ctrl_c, then I realized that's copy
           if ( currentCode != null ) {
             currentCode.cancel(true);
           }
           event.consume();
-        }
+        //}
       }
         
     },
@@ -310,8 +312,9 @@ Java.type("javax.swing.SwingUtilities").invokeLater(function(){
       // nothing here right now
     },
     keyTyped : function(event) { // return user to input area when they start typing
-      if ( textArea.getCaretPosition() < documentObject.inputStart )
+      if ( textArea.getCaretPosition() < documentObject.inputStart ) {
         textArea.setCaretPosition(document.getLength());
+      }
     }
   });
   /*document.addDocumentListener(new (Java.extend(DocumentListener)){

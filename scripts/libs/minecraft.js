@@ -15,33 +15,41 @@
   var File = Java.type("java.io.File");
   var Files = Java.type("java.nio.file.Files");
   
-  var targetVersion = Java.type("net.minecraftforge.common.ForgeVersion").mcVersion;
+  var targetVersion = Java.type("net.minecraftforge.common.MinecraftForge").MC_VERSION;
   
-  var folders = new File(mcpLocation).listFiles();
-  folders.removeIf(function(element) {
-    var lines = Files.readAllLines(element.toPath().resolve("conf").resolve("versions.cfg"));
+  var folders = Java.from(new File(mcpLocation).listFiles());
+  folders = folders.filter(function(element) {
+    if ( ! element.isDirectory() )
+      return false;
+    if ( ! element.getName().startsWith("mcp") )
+      return false;
+    var lines = Files.readAllLines(element.toPath().resolve("conf").resolve("version.cfg"));
     lines.removeIf(function(line){
       var result = /^(?:ClientVersion|ServerVersion) = (.*)$/.exec(line);
-      return result == null || result[2] != targetVersion;
+      return result == null || result[1] != targetVersion;
     });
-    return lines.size() <= 0;
+    return lines.size() > 0;
   });
-  if ( folder.length <= 0 )
+  if ( folders.length <= 0 )
     throw "no mcp version found";
-  if ( folder.length > 1 )
-    print("too many mcp versions found, using " + folders[0].getName());
+  if ( folders.length > 1 )
+    print("too many mcp versions found [" + folders.map(function(element){return element.getName()}).join(",") + "], using " + folders[0].getName());
   
-  var conf = foldres[0].toPath.resolve("conf");
+  var conf = folders[0].toPath().resolve("conf");
   minecraft.fields = {};
   minecraft.revFields = {};
   var fields = Files.readAllLines(conf.resolve("fields.csv"))
   fields.remove(0); // first line is user-centric text that tells us what each column means
+  var count = 0;
   fields.forEach(function(line) {
+    count++;
     var parts = line.split(",");
-    minecraft.fields[parts[0]] = parts[1];
-    if ( ! (parts[1] in minecreaft.revFields) )
-      minecraft.revFields[parts[1]] = [];
+    if ( ! (parts[0] in minecraft.fields) ) { // because some things have entries for both client and server side
+      minecraft.fields[parts[0]] = parts[1];
+      if ( ! (parts[1] in minecraft.revFields) )
+        minecraft.revFields[parts[1]] = [];
     minecraft.revFields[parts[1]].push(parts[0]);
+    }
   });
   
   minecraft.methods = {};
@@ -64,46 +72,51 @@
   minecraft.from = function(obj) {
     if ( primitiveTypes[typeof obj] || obj === null )
       return obj; // return primitives unmodified
-    return new JSAdapter({
-      getRealKey: function(key) {
-        var tmp;
-        if ( ! (key in obj) ) {
-          if ( key in minecraft.revFields ) {
-            tmp = minecraft.revFields[key].filter(function(key2){
-              return key2 in obj;
-            });
-            if ( tmp.length > 1 )
-              print("Found multiple mappings for " + key);
-            if ( tmp.length > 0 )
-              return tmp[0]
-          }
-          if ( key in minecraft.revMethods ) {
-            tmp = minecraft.revMethods[key].filter(function(key2){
-              return key2 in obj;
-            });
-            if ( tmp.length > 1 )
-              print("Found multiple mappings for " + key);
-            if ( tmp.length > 0 )
-              return tmp[0]
-          }
+    if ( minecraft.to(obj) != obj ) //this is already a wraped object
+      return obj; // don't wrap a wraper
+    var getRealKey = function(key) {
+      var tmp;
+      if ( typeof obj[key] == "undefined" || obj[key] == null ) {
+        if ( key in minecraft.revFields ) {
+          tmp = minecraft.revFields[key].filter(function(key2){
+            return typeof obj[key2] != "undefined" && obj[key2] != null;
+          });
+          if ( tmp.length > 1 )
+            print("Found multiple mappings for " + key);
+          if ( tmp.length > 0 )
+            return tmp[0];
         }
-        return key;
-      },
+        if ( key in minecraft.revMethods ) {
+          tmp = minecraft.revMethods[key].filter(function(key2){
+            return typeof obj[key2] != "undefined" && obj[key2] != null;
+          });
+          if ( tmp.length > 1 )
+            print("Found multiple mappings for " + key);
+          if ( tmp.length > 0 )
+            return tmp[0];
+        }
+      }
+      return key;
+    };
+    return new JSAdapter({
       __get__ : function(key) {
         if ( key == minecraft.wrapedName )
           return obj;
-        return minecraft.from(obj[this.getRealKey(key)]);
+        return minecraft.from(obj[getRealKey(key)]);
       },
       __put__ : function(key, value, strict) {
-        return minecraft.from(obj[this.getRealKey(key)] = value);
+        return minecraft.from(obj[getRealKey(key)] = value);
       },
       __call__ : function(name) {
+        var args = []
+        for ( var i = 1; i < arguments.length; i++ )
+          args[i-1] = arguments[i];
         // use, apply.call, because I don't know what the underlaying value is
-        return minecraft.from(Function.prototype.apply.call(obj[this.getRealKey(name)],obj,Array.from(arguments).shift()));
+        return minecraft.from(Function.prototype.apply.call(obj[getRealKey(name)],obj,args));
       },
       __new__ : function() {
         // yay funkiness, this seems to be the easiest way to get new.
-        return minecraft.from(new (Function.prototype.bind.apply(obj[this.getRealKey(name)], arguments)));
+        return minecraft.from(new (Function.prototype.bind.apply(obj[getRealKey(name)], arguments)));
       },
       __getIds__ : function() {
         var arr = [];
@@ -129,7 +142,7 @@
         return e;
       },
       __has__ : function(key) {
-        return this.getRealKey(key) in obj;
+        return getRealKey(key) in obj;
       },
       __delete__ : function(key, strict) {
         return delete obj[key]
@@ -157,7 +170,7 @@
   minecraft.to = function(obj) {
     if ( primitiveTypes[typeof obj] || obj === null )
       return obj; // return primitives unmodified
-    if ( minecraft.wrapedName in obj )
+    if ( typeof obj[minecraft.wrapedName] != "undefined" && obj[minecraft.wrapedName] != null )
       return obj[minecraft.wrapedName];
     return obj
   };
