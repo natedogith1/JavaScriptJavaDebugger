@@ -74,10 +74,13 @@
       return obj; // return primitives unmodified
     if ( minecraft.to(obj) != obj ) //this is already a wraped object
       return obj; // don't wrap a wraper
+    var hasKey = function(obj,key) {
+      return Object.prototype.hasOwnProperty.call(obj,key);
+    }
     var getRealKey = function(key) {
       var tmp;
       if ( typeof obj[key] == "undefined" || obj[key] == null ) {
-        if ( key in minecraft.revFields ) {
+        if ( hasKey(minecraft.revFields, key) ) {
           tmp = minecraft.revFields[key].filter(function(key2){
             return typeof obj[key2] != "undefined" && obj[key2] != null;
           });
@@ -86,7 +89,7 @@
           if ( tmp.length > 0 )
             return tmp[0];
         }
-        if ( key in minecraft.revMethods ) {
+        if ( hasKey(minecraft.revMethods, key) ) {
           tmp = minecraft.revMethods[key].filter(function(key2){
             return typeof obj[key2] != "undefined" && obj[key2] != null;
           });
@@ -108,7 +111,7 @@
         return minecraft.from(obj[getRealKey(key)] = value);
       },
       __call__ : function(name) {
-        var args = []
+        var args = [];
         for ( var i = 1; i < arguments.length; i++ )
           args[i-1] = arguments[i];
         // use, apply.call, because I don't know what the underlaying value is
@@ -121,9 +124,9 @@
       __getIds__ : function() {
         var arr = [];
         for ( key in obj ) {
-          if ( key in minecraft.fields) {
+          if ( hasKey(minecraft.fields, key) ) {
             arr.push(minecraft.fields[key]);
-          } else if ( key in minecraft.methods ) {
+          } else if ( hasKey(minecraft.methods, key) ) {
             arr.push(minecraft.methods[key]);
           } else {
             arr.push(key);
