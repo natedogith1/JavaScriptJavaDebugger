@@ -44,6 +44,8 @@ var shell = {
     delete this.loadedLibraries[name]
   }
 }
+shell.loadLib = shell.loadLibrary;
+shell.unloadLib = shell.unloadLibrary;
 
 Java.type("javax.swing.SwingUtilities").invokeLater(function(){
   var oldWriter = context.getWriter();
@@ -75,12 +77,23 @@ Java.type("javax.swing.SwingUtilities").invokeLater(function(){
   var PipedWriter = Java.type("java.io.PipedWriter");
   var WindowConstants = Java.type("javax.swing.WindowConstants");
   var System = Java.type("java.lang.System");
+  var WindowListener = Java.type("java.awt.event.WindowListener");
+  var WindowAdapter = Java.type("java.awt.event.WindowAdapter");
+  var JOptionPane = Java.type("javax.swing.JOptionPane");
   
   var lineSeperator = Java.type("java.lang.System").getProperty("line.seperator");
   
   // actual code
   var frame = new JFrame("debugger shell");
-  frame.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
+  frame.setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE);
+  frame.addWindowListener(new WindowAdapter() {
+    windowClosing: function(event) {
+      if ( JOptionPane.showConfirmDialog(frame, "Are you sure you want to close this window?",
+          "Close The Window?", JOptionPane.YES_NO_OPTION) == JOptionPane.YES_OPTION ) {
+        frame.dispose();
+      }
+    }
+  });
   
   // document that handles things
   var document_super;
