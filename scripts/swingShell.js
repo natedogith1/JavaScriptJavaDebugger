@@ -306,7 +306,7 @@ Java.type("javax.swing.SwingUtilities").invokeLater(function(){
         event.consume();
       } else if ( event.getKeyCode() == KeyEvent.VK_V ) {
         if ( event.isControlDown() ) {
-          if ( textArea.getCaretPosition < documentObject.inputStart ) {
+          if ( textArea.getCaretPosition() < documentObject.inputStart ) {
             textArea.setCaretPosition(document.getLength());
             // dont' consume, we want to paste
           }
@@ -318,6 +318,12 @@ Java.type("javax.swing.SwingUtilities").invokeLater(function(){
           }
           event.consume();
         //}
+      } else if ( event.getKeyCode() == KeyEvent.VK_A ) {
+        if ( event.isControlDown() ) {
+          textArea.setCaretPosition(documentObject.inputStart);
+          textArea.moveCaretPosition(document.getLength());
+          event.consume();
+        }
       }
         
     },
@@ -326,6 +332,9 @@ Java.type("javax.swing.SwingUtilities").invokeLater(function(){
     },
     keyTyped : function(event) { // return user to input area when they start typing
       if ( textArea.getCaretPosition() < documentObject.inputStart ) {
+        if ( event.isControlDown() ) {
+          return; // this isn't a typed character
+        }
         textArea.setCaretPosition(document.getLength());
       }
     }
