@@ -5,25 +5,58 @@
 //
 //  Expected Arguments Name: args
 //
-//  Arguments: libraryPath;scriptFile
+//  Arguments: libraryPath[;scriptFile[:scriptArgs] ...]
 //      libraryPath is the path that
 //        shell.loadLibrary uses
-//      scriptFile, if provided, is the name
-//        of a file to run when the shell is made
+//      scriptFile is the name of a file to
+//        run when the shell is made
 //        if this file starts with a '!' then
 //        the code is run before this script returns
 //        otherwise the code is run after the console
 //        is made
+//      scriptArgs will be passed to the function
+//        the script returns, if it returns a function
 //
 //////////////////////////////////////////////////////
 
 "use strict";
 
+function findNextNonEscaped(search, find, escape) {
+  if ( arguments.length < 3 )
+    escape = "\\";
+  var curFind;
+  var midFind = -1;
+  while ( (curFind = search.indexOf(find, midFind+1)) >= 0 ) {
+    var i = curFind - 1;
+    for ( ; i >= 0 && search.charAt(i) === escape; i-- ) {
+      // everything is handled in conditions
+    }
+    if ( (curFind - 1 - i) % 2 === 0 ) {
+      // an even number of escapes
+      return curFind;
+    } else {
+      // an odd number of escapes
+      midFind = curFind;
+    }
+  }
+  return -1;
+}
+
+function parseEscapes(str, escape) {
+  if ( arguments.length < 2 )
+    escape = "\\";
+  escape = escape.charCodeAt(0).toString(16);
+  escape = "0000".substr(escape.length) + escape;
+  return str.replace( RegExp("\\u" + escape + "(.)", "g"), "$1" );
+}
+
 var libraryPath;
-if ( args.indexOf(";") >= 0 )
-  libraryPath = args.substring(0, args.indexOf(";"));
+if ( findNextNonEscaped(args,";") >= 0 )
+  libraryPath = args.substring(0, findNextNonEscaped(args,";")-1);
 else
   libraryPath = args;
+args = args.substr(libraryPath.length + 1);
+libraryPath = parseEscapes(libraryPath);
 
 var shell = {
   loadedLibraries: {},
@@ -399,13 +432,51 @@ Java.type("javax.swing.SwingUtilities").invokeLater(function(){
   frame.pack();
   frame.setVisible(true);
   
-  
-  var scriptName = args.substring(libraryPath.length + 1);
-  if ( scriptName != "" )
-    runFunction(function() {
-      load(scriptName);
-    });
+  runFunction(function(){
+    var scripts = args;
+    var scriptName;
+    var scriptArgs;
+    var script;
+    while ( scripts.length > 0 ) {
+      if ( findNextNonEscaped(scripts, ";") > 0 )
+        scriptArgs = scripts.substring(0, findNextNonEscaped(scripts, ";")-1);
+      else
+        scriptArgs = scripts;
+      scripts = scripts.substr(scriptArgs.length + 1);
+      if ( findNextNonEscaped(scriptArgs, ":") > 0 )
+        scriptName = scriptArgs.substring(0, findNextNonEscaped(scriptArgs, ":")-1);
+      else
+        scriptName = scriptArgs;
+      scriptArgs = scriptArgs.substr(scriptName+1);
+      if ( ! scriptName.startsWith("!") ) {
+        script = load(scriptName);
+        if ( typeof script == "function" )
+          script(scriptArgs);
+      }
+    }
+  });
 });
 
-if ( args.substring(libraryPath.length + 1).startsWith("!") )
-  load(args.substring(libraryPath.length + 2));
+(function(){
+  var scripts = args;
+  var scriptName;
+  var scriptArgs;
+  var script;
+  while ( scripts.length > 0 ) {
+    if ( findNextNonEscaped(scripts, ";") > 0 )
+      scriptArgs = scripts.substring(0, findNextNonEscaped(scripts, ";")-1);
+    else
+      scriptArgs = scripts;
+    scripts = scripts.substr(scriptArgs.length + 1);
+    if ( findNextNonEscaped(scriptArgs, ":") > 0 )
+      scriptName = scriptArgs.substring(0, findNextNonEscaped(scriptArgs, ":")-1);
+    else
+      scriptName = scriptArgs;
+    scriptArgs = scriptArgs.substr(scriptName+1);
+    if ( scriptName.startsWith("!") ) {
+      script = load(scriptName.substring(1));
+      if ( typeof script == "function" )
+        script(scriptArgs);
+    }
+  }
+})();
