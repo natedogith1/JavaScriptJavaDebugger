@@ -73,7 +73,7 @@ var shell = {
 shell.loadLib = shell.loadLibrary;
 shell.unloadLib = shell.unloadLibrary;
 if ( shell.findNextNonEscaped(args,";") >= 0 )
-  shell.libraryPath = args.substring(0, shell.findNextNonEscaped(args,";")-1);
+  shell.libraryPath = args.substring(0, shell.findNextNonEscaped(args,";"));
 else
   shell.libraryPath = args;
 args = args.substr(shell.libraryPath.length + 1);
@@ -439,16 +439,16 @@ Java.type("javax.swing.SwingUtilities").invokeLater(function(){
     var scriptArgs;
     var script;
     while ( scripts.length > 0 ) {
-      if ( shell.findNextNonEscaped(scripts, ";") > 0 )
-        scriptArgs = scripts.substring(0, shell.findNextNonEscaped(scripts, ";")-1);
+      if ( shell.findNextNonEscaped(scripts, ";") >= 0 )
+        scriptArgs = scripts.substring(0, shell.findNextNonEscaped(scripts, ";"));
       else
         scriptArgs = scripts;
       scripts = scripts.substr(scriptArgs.length + 1);
-      if ( shell.findNextNonEscaped(scriptArgs, ":") > 0 )
-        scriptName = scriptArgs.substring(0, shell.findNextNonEscaped(scriptArgs, ":")-1);
+      if ( shell.findNextNonEscaped(scriptArgs, ":") >= 0 )
+        scriptName = scriptArgs.substring(0, shell.findNextNonEscaped(scriptArgs, ":"));
       else
         scriptName = scriptArgs;
-      scriptArgs = scriptArgs.substr(scriptName+1);
+      scriptArgs = scriptArgs.substr(scriptName.length+1);
       scriptName = shell.parseEscapes(scriptName);
       scriptArgs = shell.parseEscapes(scriptArgs);
       if ( ! scriptName.startsWith("!") ) {
@@ -466,16 +466,16 @@ Java.type("javax.swing.SwingUtilities").invokeLater(function(){
   var scriptArgs;
   var script;
   while ( scripts.length > 0 ) {
-    if ( shell.findNextNonEscaped(scripts, ";") > 0 )
-      scriptArgs = scripts.substring(0, shell.findNextNonEscaped(scripts, ";")-1);
+    if ( shell.findNextNonEscaped(scripts, ";") >= 0 )
+      scriptArgs = scripts.substring(0, shell.findNextNonEscaped(scripts, ";"));
     else
       scriptArgs = scripts;
     scripts = scripts.substr(scriptArgs.length + 1);
-    if ( shell.findNextNonEscaped(scriptArgs, ":") > 0 )
-      scriptName = scriptArgs.substring(0, shell.findNextNonEscaped(scriptArgs, ":")-1);
+    if ( shell.findNextNonEscaped(scriptArgs, ":") >= 0 )
+      scriptName = scriptArgs.substring(0, shell.findNextNonEscaped(scriptArgs, ":"));
     else
       scriptName = scriptArgs;
-    scriptArgs = scriptArgs.substr(scriptName+1);
+    scriptArgs = scriptArgs.substr(scriptName.length+1);
     scriptName = shell.parseEscapes(scriptName);
     scriptArgs = shell.parseEscapes(scriptArgs);
     if ( scriptName.startsWith("!") ) {
