@@ -1,6 +1,8 @@
 "use strict";
 
 (function(){
+  if ( typeof minecraft === "undefined" || typeof minecraft.mcpLocation === "undefined" )
+    throw "minecraft.mcpLocation must be defined before loading this library";
   var minecraft = {
     fields: null, // contains srg field -> name field mapping
     revFields: null, // contains name field -> srg field[]
@@ -11,7 +13,6 @@
     to: null, // wraps object
     translate: null, // translates the string into human-intended text
   };
-  var mcpLocation = "C:\\Users\\Nathan\\Desktop\\mcp\\";
   var debugUtils = shell.loadLib("debugUtils");
   
   var File = Java.type("java.io.File");
@@ -22,7 +23,7 @@
   
   var targetVersion = Java.type("net.minecraftforge.common.MinecraftForge").MC_VERSION;
   
-  var folders = Java.from(new File(mcpLocation).listFiles());
+  var folders = Java.from(new File(minecraft.mcpLocation).listFiles());
   folders = folders.filter(function(element) {
     if ( ! element.isDirectory() )
       return false;
@@ -244,4 +245,4 @@
     return minecraft.from(minecraft.to(StatCollector).translateToLocal(str));
   }
   return minecraft;
-})();
+});

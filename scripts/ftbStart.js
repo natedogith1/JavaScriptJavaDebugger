@@ -1,6 +1,6 @@
 var minecraft = {}
 
-(function(){
+(function(args){
+  minecraft.mcpLocation = args;
   minecraft.vanilla = shell.loadLib("minecraft");
-  
-})();
+});
