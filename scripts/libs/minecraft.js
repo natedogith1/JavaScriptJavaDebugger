@@ -3,14 +3,14 @@
 (function(){
   if ( typeof minecraft === "undefined" || typeof minecraft.mcpLocation === "undefined" )
     throw "minecraft.mcpLocation must be defined before loading this library";
-  var minecraft = {
+  var vanilla = {
     fields: null, // contains srg field -> name field mapping
     revFields: null, // contains name field -> srg field[]
     methods: null, // contains srg method -> name method mapping
     revMethods: null, // contains name mehtod -> srg method[]
-    wrapedName: "wrapedMinecraftObject", // name of the field that the object is stored when using minecraft.to(object)
-    from: null, // unwraps object
-    to: null, // wraps object
+    wrapedName: "wrapedMinecraftObject", // name of the field that the object is stored when using vanilla.wrap(object)
+    unwrap: null, // unwraps object
+    wrap: null, // wraps object
     translate: null, // translates the string into human-intended text
   };
   var debugUtils = shell.loadLib("debugUtils");
@@ -42,31 +42,31 @@
     print("too many mcp versions found [" + folders.map(function(element){return element.getName()}).join(",") + "], using " + folders[0].getName());
   
   var conf = folders[0].toPath().resolve("conf");
-  minecraft.fields = {};
-  minecraft.revFields = {};
+  vanilla.fields = {};
+  vanilla.revFields = {};
   var fields = Files.readAllLines(conf.resolve("fields.csv"))
   fields.remove(0); // first line is user-centric text that tells us what each column means
   fields.forEach(function(line) {
     var parts = line.split(",");
-    if ( ! (parts[0] in minecraft.fields) ) { // because some things have entries for both client and server side
-      minecraft.fields[parts[0]] = parts[1];
-      if ( ! (parts[1] in minecraft.revFields) )
-        minecraft.revFields[parts[1]] = [];
-      minecraft.revFields[parts[1]].push(parts[0]);
+    if ( ! (parts[0] in vanilla.fields) ) { // because some things have entries for both client and server side
+      vanilla.fields[parts[0]] = parts[1];
+      if ( ! (parts[1] in vanilla.revFields) )
+        vanilla.revFields[parts[1]] = [];
+      vanilla.revFields[parts[1]].push(parts[0]);
     }
   });
   
-  minecraft.methods = {};
-  minecraft.revMethods = {};
+  vanilla.methods = {};
+  vanilla.revMethods = {};
   var methods = Files.readAllLines(conf.resolve("methods.csv"));
   methods.remove(0);
   methods.forEach(function(line) {
     var parts = line.split(",");
-    if ( ! (parts[0] in minecraft.methods) ) { // because some things have entries for both client and server side
-      minecraft.methods[parts[0]] = parts[1];
-      if ( ! (parts[1] in minecraft.revMethods) )
-        minecraft.revMethods[parts[1]] = [];
-      minecraft.revMethods[parts[1]].push(parts[0]);
+    if ( ! (parts[0] in vanilla.methods) ) { // because some things have entries for both client and server side
+      vanilla.methods[parts[0]] = parts[1];
+      if ( ! (parts[1] in vanilla.revMethods) )
+        vanilla.revMethods[parts[1]] = [];
+      vanilla.revMethods[parts[1]].push(parts[0]);
     }
   });
   
@@ -108,17 +108,17 @@
     }
     return newWrapperCache[arity];
   }
-  minecraft.to = function(obj) {
+  vanilla.wrap = function(obj) {
     if ( primitiveTypes[typeof obj] || obj === null )
       return obj; // return primitives unmodified
-    if ( minecraft.from(obj) != obj ) //this is already a wraped object
+    if ( vanilla.unwrap(obj) != obj ) //this is already a wraped object
       return obj; // don't wrap a wraper
     var hasKey = function(obj,key) {
       return Object.prototype.hasOwnProperty.call(obj,key);
     };
     var getRealFieldKey = function(key) {
-      if ( hasKey(minecraft.revFields, key) ) {
-        var tmp = minecraft.revMethods[key].filter(function(key2){
+      if ( hasKey(vanilla.revFields, key) ) {
+        var tmp = vanilla.revMethods[key].filter(function(key2){
           return typeof obj[key2] != "undefined" && obj[key2] != null;
         });
         if ( tmp.length > 1 )
@@ -130,8 +130,8 @@
     }
     var getRealMethodKeys = function(key) {
       var result = [];
-      if ( hasKey(minecraft.revMethods, key) ) {
-        minecraft.revMethods[key].forEach(function(key2){
+      if ( hasKey(vanilla.revMethods, key) ) {
+        vanilla.revMethods[key].forEach(function(key2){
           if ( typeof obj[key2] != "undefined" && obj[key2] != null )
             result.push(key2);
         });
@@ -142,12 +142,12 @@
     };
     return new JSAdapter({
       __get__ : function(key) {
-        if ( key == minecraft.wrapedName )
+        if ( key == vanilla.wrapedName )
           return obj;
-        return minecraft.to(obj[getRealFieldKey(key)]);
+        return vanilla.to(obj[getRealFieldKey(key)]);
       },
       __put__ : function(key, value, strict) {
-        return minecraft.to(obj[getRealFieldKey(key)] = value);
+        return vanilla.to(obj[getRealFieldKey(key)] = value);
       },
       __call__ : function(name) {
         if ( name == "toString" ) {
@@ -161,12 +161,12 @@
           throw new TypeError(name + " is not a function");
         var args = [obj,keys[0]];
         for ( var i = 1; i < arguments.length; i++ )
-          args.push(minecraft.from(arguments[i]));
+          args.push(vanilla.unwrap(arguments[i]));
         var firstErr = null;
         for ( var i = 0; i < keys.length; i++ ) {
           args[1] = keys[i];
           try {
-            return minecraft.to(getFunctionWrapper(arguments.length-1).apply(null,args));
+            return vanilla.to(getFunctionWrapper(arguments.length-1).apply(null,args));
           }catch(e){
             if ( e instanceof TypeError ) {
               if ( ! firstErr )
@@ -182,16 +182,16 @@
       __new__ : function() {
         var args = [obj];
         for ( var i = 1; i < arguments.length; i++ )
-          args.push(minecraft.from(arguments[i]));
-        return minecraft.to(getNewWrapper(arguments.length).apply(null,args));
+          args.push(vanilla.unwrap(arguments[i]));
+        return vanilla.to(getNewWrapper(arguments.length).apply(null,args));
       },
       __getIds__ : function() {
         var arr = [];
         for ( key in obj ) {
-          if ( hasKey(minecraft.fields, key) ) {
-            arr.push(minecraft.fields[key]);
-          } else if ( hasKey(minecraft.methods, key) ) {
-            arr.push(minecraft.methods[key]);
+          if ( hasKey(vanilla.fields, key) ) {
+            arr.push(vanilla.fields[key]);
+          } else if ( hasKey(vanilla.methods, key) ) {
+            arr.push(vanilla.methods[key]);
           } else {
             arr.push(key);
           }
@@ -234,15 +234,15 @@
       }
     });
   };
-  minecraft.from = function(obj) {
+  vanilla.unwrap = function(obj) {
     if ( primitiveTypes[typeof obj] || obj === null )
       return obj; // return primitives unmodified
-    if ( typeof obj[minecraft.wrapedName] != "undefined" && obj[minecraft.wrapedName] != null )
-      return obj[minecraft.wrapedName];
+    if ( typeof obj[vanilla.wrapedName] != "undefined" && obj[vanilla.wrapedName] != null )
+      return obj[vanilla.wrapedName];
     return obj
   };
-  minecraft.translate = function(str) {
-    return minecraft.from(minecraft.to(StatCollector).translateToLocal(str));
+  vanilla.translate = function(str) {
+    return vanilla.unwrap(vanilla.wrap(StatCollector).translateToLocal(str));
   }
-  return minecraft;
+  return vanilla;
 });
