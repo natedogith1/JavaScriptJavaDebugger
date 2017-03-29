@@ -32,7 +32,7 @@ var shell = {
     arr[arr.length-1] += ".js";
     return arr.reduce(function(prev,cur) {
       return new File(prev, cur);
-    }, new File(libraryPath)).getPath();
+    }, new File(this.libraryPath)).getPath();
   },
   loadLibrary: function(name) {
     if ( ! (name in this.loadedLibraries) )
