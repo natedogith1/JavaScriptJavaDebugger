@@ -290,25 +290,33 @@ Java.type("javax.swing.SwingUtilities").invokeLater(function(){
   textArea.addKeyListener(new KeyListener(){
     keyPressed : function(event) {
       if ( event.getKeyCode() == KeyEvent.VK_ENTER ) { // comand-execution and history adding
-        if ( ! currentCode ) {
-          var text = documentObject.getInput();
-          history.add(text);
-          runFunction(function() {
-            try {
-              var tmp = eval; // give eval a different name, so that it executes in the global context
-              var res = tmp(text);
-              if ( typeof res != "undefined" )
-                print(res);
-            } catch( e ) {
-              print( e );
-            }
-          });
+        if ( event.isShiftDown() ) {
+          if ( textArea.getCaretPosition() < documentObject.inputStart ) {
+            textArea.setCaretPosition(document.getLength());
+          }
+          documentObject.insertString(textArea.getCaretPosition(), "\n", null);
           event.consume();
         } else {
-          var text = documentObject.getInput();
-          inWriter.write(""+text);
-          inWriter.write(""+System.getProperty("line.seperator"));
-          event.consume();
+            if ( ! currentCode ) {
+              var text = documentObject.getInput();
+              history.add(text);
+              runFunction(function() {
+                try {
+                  var tmp = eval; // give eval a different name, so that it executes in the global context
+                  var res = tmp(text);
+                  if ( typeof res != "undefined" )
+                    print(res);
+                } catch( e ) {
+                  print( e );
+                }
+              });
+              event.consume();
+            } else {
+              var text = documentObject.getInput();
+              inWriter.write(""+text);
+              inWriter.write(""+System.getProperty("line.seperator"));
+              event.consume();
+            }
         }
       } else if ( event.getKeyCode() == KeyEvent.VK_LEFT ) { // can't move left past the begining of input
         if ( textArea.getCaretPosition() == documentObject.inputStart ) {
