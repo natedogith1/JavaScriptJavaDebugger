@@ -16,7 +16,7 @@
 //        is made
 //      scriptArgs will be passed to the function
 //        the script returns, if it returns a function
-//      libraryPath, scriftFile, and scriptArgs can
+//      libraryPath, scriptFile, and scriptArgs can
 //        escape characters using backslashes
 //
 //////////////////////////////////////////////////////
