@@ -102,5 +102,21 @@
       return optimals
   }
   
+  debugUtils.getStaticField = function(clazz, fieldName) {
+      if ( ! clazz.getDeclaredField ) {
+          clazz = clazz.class
+      }
+      var field = clazz.getDeclaredField(fieldName);
+      field.setAccessible(true);
+      return field.get(null);
+  }
+  
+  debugUtils.getField = function(object, fieldName) {
+      var clazz = object.getClass();
+      var field = clazz.getDeclaredField(fieldName);
+      field.setAccessible(true);
+      return field.get(object);
+  }
+  
   return debugUtils;
 })();
