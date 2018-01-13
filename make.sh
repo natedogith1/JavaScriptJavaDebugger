@@ -1,9 +1,16 @@
 sh compile.sh
 
-rm -rf bin/META-INF
-cp -r src/META-INF bin/META-INF
+if [ -e bin/META-IN ]
+then
+    rm -rf bin/META-INF
+    cp -r src/META-INF bin/META-INF
+fi
 
-rm debugger.jar
-pushd bin
+if [ -e debugger.jar ]
+then
+    rm debugger.jar
+fi
+#pushd bin
+cd bin
 zip -r ../debugger.jar .
-popd
+#popd
