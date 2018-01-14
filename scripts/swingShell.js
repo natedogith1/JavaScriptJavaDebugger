@@ -427,7 +427,7 @@ Java.type("javax.swing.SwingUtilities").invokeLater(function(){
           });
         }
       else {
-        throw "invalid argument count [" + args.length + "]";
+        throw "invalid argument count [" + arguments.length + "]";
       }
     },
     flush: function(){},
