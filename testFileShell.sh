@@ -10,4 +10,4 @@ then
     mkfifo ./pipeout.ignore
 fi
 
-java -javaagent:"debugger.jar=./scripts/fileShell.js;inst:args:;./pipein.ignore;./pipeout.ignore;./scripts/libs" -jar debugger.jar "./scripts/nothing.js;inst:args:;"
+java -javaagent:"debugger.jar=./scripts/fileShell.js;inst:args:;./pipein.ignore;./pipeout.ignore;false;./scripts/libs" -jar debugger.jar "./scripts/nothing.js;inst:args:;"

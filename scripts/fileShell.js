@@ -7,9 +7,12 @@
 //
 //  Expected Arguments Name: args
 //
-//  Arguments: inputPipe;outputPipe;libraryPath[;scriptFile[:scriptArgs] ...]
+//  Arguments: inputPipe;outputPipe;daemon;libraryPath[;scriptFile[:scriptArgs] ...]
 //      inputPipe is the file to read input from
 //      outputPipe is the file to write output to
+//      daemon is whether or not threads should be
+//          spawner as daemon threads. This should
+//          either be "true" or "false"
 //      libraryPath is the path that
 //          shell.loadLibrary uses
 //      scriptFile is the name of a file to
@@ -72,13 +75,16 @@ var shell = {
         escape = escape.charCodeAt(0).toString(16);
         escape = "0000".substr(escape.length) + escape;
         return str.replace( RegExp("\\u" + escape + "(.)", "g"), "$1" );
-    }
+    },
 }
 shell.loadLib = shell.loadLibrary;
 shell.unloadLib = shell.unloadLibrary;
 
 
 (function(){
+    var inputPipe;
+    var outputPipe;
+    var daemon;
     if ( shell.findNextNonEscaped(args, ";") >= 0 ) {
         inputPipe = args.substring(0, shell.findNextNonEscaped(args, ";"));
     } else {
@@ -86,6 +92,7 @@ shell.unloadLib = shell.unloadLibrary;
     }
     args = args.substr(inputPipe.length + 1);
     inputPipe = shell.parseEscapes(inputPipe);
+
     if ( shell.findNextNonEscaped(args, ";") >= 0 ) {
         outputPipe = args.substring(0, shell.findNextNonEscaped(args, ";"));
     } else {
@@ -94,14 +101,29 @@ shell.unloadLib = shell.unloadLibrary;
     args = args.substr(outputPipe.length + 1);
     outputPipe = shell.parseEscapes(outputPipe);
 
+    if ( shell.findNextNonEscaped(args, ";") >= 0 ) {
+        daemon = args.substring(0, shell.findNextNonEscaped(args, ";"));
+    } else {
+        daemon = args;
+    }
+    args = args.substr(daemon.length + 1);
+    daemon = shell.parseEscapes(daemon);
+    if ( daemon.toLowerCase() == "true" ) {
+        daemon = true;
+    } else if ( daemon.toLowerCase() == "false" ) {
+        daemon = false;
+    } else {
+        throw "bad daemon value: " + daemon;
+    }
+
     if ( shell.findNextNonEscaped(args,";") >= 0 )
         shell.libraryPath = args.substring(0, shell.findNextNonEscaped(args,";"));
     else
         shell.libraryPath = args;
     args = args.substr(shell.libraryPath.length + 1);
     shell.libraryPath = shell.parseEscapes(shell.libraryPath);
-    
-    
+
+
     var FileReader = Java.type("java.io.FileReader");
     var FileWriter = Java.type("java.io.FileWriter");
     var javaString = Java.type("java.lang.String");
@@ -112,14 +134,14 @@ shell.unloadLib = shell.unloadLibrary;
     var Reader = Java.type("java.io.Reader");
     var PipedWriter = Java.type("java.io.PipedWriter");
     var PipedReader = Java.type("java.io.PipedReader");
-    
+
     var inputPipe;
     var outputPipe;
-    
+
     var mainThread = new Thread(function() {
         var inFileReader;
         var outFileWriter;
-        
+
         function resetFiles() {
             if ( inFileReader )
                 inFileReader.close();
@@ -190,7 +212,7 @@ shell.unloadLib = shell.unloadLibrary;
                 } else if ( arguments.length == 3 ) {
                     if ( a instanceof java.lang.String ) {
                         return safeCall(outFileWriter, "write(java.lang.String,int,int)", a, b, c);
-                    } else { 
+                    } else {
                         return safeCall(outFileWriter, "write(char[],int,int)", a, b, c);
                     }
                 }
@@ -233,6 +255,7 @@ shell.unloadLib = shell.unloadLibrary;
             });
             resetReader();
             codeThread.setName("javascript code: " + curText);
+            codeThread.setDaemon(daemon);
             codeThread.start();
         }
 
@@ -270,6 +293,7 @@ shell.unloadLib = shell.unloadLibrary;
                 }
             }
         });
+        inputThread.setDaemon(daemon);
         inputThread.start();
 
         var outWriter_super;
@@ -319,6 +343,7 @@ shell.unloadLib = shell.unloadLibrary;
             }
         });
     });
+    mainThread.setDaemon(daemon);
     mainThread.start();
 })();
 
@@ -348,29 +373,3 @@ shell.unloadLib = shell.unloadLibrary;
     }
 })();
 
-/*
-var FileReader = Java.type("java.io.FileReader");
-var FileWriter = Java.type("java.io.FileWriter");
-
-var inStream = new FileReader("./pipein.ignore");
-var outStream = new FileWriter("./pipeout.ignore");
-
-var inBuff = new (Java.type("char[]"))(1024);
-var sysIn = new (Java.type("java.io.InputStreamReader"))(java.lang.System.in);
-var sysOut = new (Java.type("java.io.OutputStreamWriter"))(java.lang.System.out);
-
-print("ready");
-
-while(true) {
-    if ( inStream.ready() ) {
-        var count = inStream.read(inBuff);
-        sysOut.write(inBuff, 0, count);
-        sysOut.flush();
-    }
-    if ( sysIn.ready() ) {
-        var count = sysIn.read(inBuff);
-        outStream.write(inBuff, 0, count);
-        outStream.flush();
-    }
-}
-*/
