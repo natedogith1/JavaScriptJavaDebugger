@@ -277,9 +277,9 @@ Java.type("javax.swing.SwingUtilities").invokeLater(function(){
     currentCode = new swingWorkerAdapter() {
       doInBackground: func,
       done: function() {
+        currentCode = null;
         inWriter.close()
         documentObject.prompt = oldPrompt;
-        currentCode = null;
       }
     };
     documentObject.prompt = "";
