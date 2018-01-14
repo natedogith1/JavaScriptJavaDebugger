@@ -78,13 +78,32 @@ var sysOut = new (Java.type("java.io.OutputStreamWriter"))(java.lang.System.out)
 
 print("ready");
 
-try {
-    while(true) {
-        if ( inStream.ready() ) {
+var inThread = new java.lang.Thread(function() {
+    var inBuff = new (Java.type("char[]"))(1024);
+    try {
+        while ( true ) {
             var count = inStream.read(inBuff);
+            if ( count < 0 ) {
+                java.lang.System.exit(0);
+            }
             sysOut.write(inBuff, 0, count);
             sysOut.flush();
         }
+     } catch ( e ) {
+        if ( e instanceof java.io.IOException ) {
+            if ( e.getMessage() == "Broken pipe" ) {
+                e = undefined;
+            }
+        }
+        if ( e !== undefined ) {
+            throw e;
+        }
+    }
+});
+inThread.start();
+
+try {
+    while(true) {
         if ( sysIn.ready() ) {
             var count = sysIn.read(inBuff);
             outStream.write(inBuff, 0, count);
@@ -101,3 +120,4 @@ try {
         throw e;
     }
 }
+java.lang.System.exit(0);
