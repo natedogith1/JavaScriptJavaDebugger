@@ -1,74 +1,109 @@
 "use strict";
 
 (function(){
-  if ( typeof minecraft === "undefined" || typeof minecraft.mcpLocation === "undefined" )
-    throw "minecraft.mcpLocation must be defined before loading this library";
   var vanilla = {
-    fields: null, // contains srg field -> name field mapping
-    revFields: null, // contains name field -> srg field[]
-    methods: null, // contains srg method -> name method mapping
-    revMethods: null, // contains name mehtod -> srg method[]
+    forward: {}, // contains srg -> entry
+    backward: {}, // contains name -> entry
+    params: {}, // contains srg method parameter -> entry
     wrapedName: "wrapedMinecraftObject", // name of the field that the object is stored when using vanilla.wrap(object)
     unwrap: null, // unwraps object
     wrap: null, // wraps object
+    getDescription: null, // getDescription(object, field or method name), returns the descriptive text for a method or field fo an object
     translate: null, // translates the string into human-intended text
   };
   var debugUtils = shell.loadLib("debugUtils");
   
-  var File = Java.type("java.io.File");
-  var Files = Java.type("java.nio.file.Files");
-  var DynamicMethod = Java.type("jdk.internal.dynalink.beans.DynamicMethod"); // Java method representation
   var Class = Java.type("java.lang.Class");
-  var StatCollector = debugUtils.findClass("net.minecraft.util.StatCollector").static;
+  //var StatCollector = debugUtils.findClass("net.minecraft.util.StatCollector").static;
+  var URL = Java.type("java.net.URL");
+  var InputStreamReader = Java.type("java.io.InputStreamReader");
+  var StringBuilder = Java.type("java.lang.StringBuilder");
+  var charArray = Java.type("char[]");
+  var ZipInputStream = Java.type("java.util.zip.ZipInputStream");
+  var byteArray = Java.type("byte[]");
+  var javaString = Java.type("java.lang.String");
   
-  var targetVersion = Java.type("net.minecraftforge.common.MinecraftForge").MC_VERSION;
+  // var RealmsSharedConstants = debugUtils.findClass("net.minecraft.realms.RealmsSharedConstants");
+  // if ( ! RealmsSharedConstants ) {
+    // throw "could not find class net.minecraft.realms.RealmsSharedConstants";
+  // }
+  // var minecraftVersion = RealmsSharedConstants.static.VERSION_STRING;
+  var minecraftVersion = "1.7.10";
   
-  var folders = Java.from(new File(minecraft.mcpLocation).listFiles());
-  folders = folders.filter(function(element) {
-    if ( ! element.isDirectory() )
-      return false;
-    if ( ! element.getName().startsWith("mcp") )
-      return false;
-    var lines = Files.readAllLines(element.toPath().resolve("conf").resolve("version.cfg"));
-    lines.removeIf(function(line){
-      var result = /^(?:ClientVersion|ServerVersion) = (.*)$/.exec(line);
-      return result == null || result[1] != targetVersion;
-    });
-    return lines.size() > 0;
-  });
-  if ( folders.length <= 0 )
-    throw "no mcp version found";
-  if ( folders.length > 1 )
-    print("too many mcp versions found [" + folders.map(function(element){return element.getName()}).join(",") + "], using " + folders[0].getName());
+  // based on https://github.com/bspkrs/MCPMappingViewer/
+  var versionURL = new URL("http://export.mcpbot.bspk.rs/versions.json");
+  var versionConnection = versionURL.openConnection();
+  var reader = new InputStreamReader(versionConnection.getInputStream());
+  var charBuffer = new charArray(1024);
+  var builder = new StringBuilder();
+  var charsRead;
+  while ( (charsRead = reader.read(charBuffer)) >= 0 ) {
+    builder.append(charBuffer, 0, charsRead);
+  }
+  reader.close();
   
-  var conf = folders[0].toPath().resolve("conf");
-  vanilla.fields = {};
-  vanilla.revFields = {};
-  var fields = Files.readAllLines(conf.resolve("fields.csv"))
-  fields.remove(0); // first line is user-centric text that tells us what each column means
-  fields.forEach(function(line) {
-    var parts = line.split(",");
-    if ( ! (parts[0] in vanilla.fields) ) { // because some things have entries for both client and server side
-      vanilla.fields[parts[0]] = parts[1];
-      if ( ! (parts[1] in vanilla.revFields) )
-        vanilla.revFields[parts[1]] = [];
-      vanilla.revFields[parts[1]].push(parts[0]);
+  var channel = "stable";
+  
+  var versions = JSON.parse(builder.toString())[minecraftVersion][channel]
+  var version = versions.sort()[versions.length-1];
+  
+  var mappingURL = new URL("http://export.mcpbot.bspk.rs/mcp_" + channel + "/" + version + "-" + minecraftVersion + "/mcp_" + channel + "-" + version + "-" + minecraftVersion + ".zip");
+  var mappingConnection = mappingURL.openConnection();
+  var mappingZipStream = new ZipInputStream(mappingConnection.getInputStream());
+  
+  var zipEntry;
+  while ( (zipEntry = mappingZipStream.getNextEntry()) != null ) {
+    if ( ! zipEntry.getName().endsWith(".csv") ) {
+      continue;
     }
-  });
-  
-  vanilla.methods = {};
-  vanilla.revMethods = {};
-  var methods = Files.readAllLines(conf.resolve("methods.csv"));
-  methods.remove(0);
-  methods.forEach(function(line) {
-    var parts = line.split(",");
-    if ( ! (parts[0] in vanilla.methods) ) { // because some things have entries for both client and server side
-      vanilla.methods[parts[0]] = parts[1];
-      if ( ! (parts[1] in vanilla.revMethods) )
-        vanilla.revMethods[parts[1]] = [];
-      vanilla.revMethods[parts[1]].push(parts[0]);
+    var byteBuffer = new byteArray(zipEntry.getSize());
+    mappingZipStream.read(byteBuffer, 0, zipEntry.getSize());
+    var str = new javaString(byteBuffer);
+    var strChars = str.split("");
+    var lines = [[]];
+    var curSegment = "";
+    var inQuoted = false;
+    for ( var i = 0; i < str.length; i++ ) {
+      if ( strChars[i] == '"' ) {
+        if ( curSegment.length <= 0 ) {
+          inQuoted = true;
+        } else if ( i+1 < strChars.length && strChars[i+1] == '"' ) {
+          curSegment += '"';
+          i++;
+        } else {
+          // do nothing
+        }
+      } else if ( strChars[i] == "," && ! inQuoted ) {
+        lines[lines.length-1].push(curSegment);
+        curSegment = "";
+      } else if ( strChars[i] == "\r" && i+1 < strChars.length && strChars[i+1] == "\n" && !inQuoted ) {
+        lines[lines.length-1].push(curSegment);
+        curSegment = "";
+        lines.push([]);
+      } else {
+        curSegment += strChars[i];
+      }
     }
-  });
+    for ( var i = 1; i < lines.length; i++ ) { // first line is header
+      var line = lines[i];
+      var entry = {};
+      for ( var j = 0; j < lines[0].length; j++ ) {
+        entry[lines[0][j]] = line[j];
+      }
+      if ( zipEntry.getName() == "fields.csv" || zipEntry.getName() == "methods.csv" ) {
+        vanilla.forward[entry.searge] = entry;
+        if ( ! (entry.name in vanilla.backward) ) {
+          vanilla.backward[entry.name] = [];
+        }
+        vanilla.backward[entry.name].push(entry);
+      } else if ( zipEntry.getName() == "params.csv" ) {
+        if ( ! (entry.param in vanilla.params) ) {
+          vanilla.params[entry.param] = entry;
+        }
+      }
+    }
+  }
+  mappingZipStream.close();
   
   var primitiveTypes = {};
   primitiveTypes["undefined"] = true,
@@ -103,11 +138,24 @@
         args += "a" + i;
       }
       newWrapperCache[arity] = new Function(
-        "object,methodName"+(arity<=0?"":","+args),
+        "object"+(arity<=0?"":","+args),
         "return new object(" + args + ");");
     }
     return newWrapperCache[arity];
   }
+  var getRealKey = function(obj, key) {
+    if ( hasKey(vanilla.backward, key ) ) {
+      var tmp = vanilla.backwards[key].filter(function(entry){
+        return entry.searge in obj;
+      });
+      if ( tmp.length > 1 ) {
+        print("Found multiple mappings for " + key);
+      } else if ( tmp.length > 0 ) {
+        return tmp[0].searge;
+      }
+    }
+    return key;
+  };
   vanilla.wrap = function(obj) {
     if ( primitiveTypes[typeof obj] || obj === null )
       return obj; // return primitives unmodified
@@ -116,68 +164,27 @@
     var hasKey = function(obj,key) {
       return Object.prototype.hasOwnProperty.call(obj,key);
     };
-    var getRealFieldKey = function(key) {
-      if ( hasKey(vanilla.revFields, key) ) {
-        var tmp = vanilla.revMethods[key].filter(function(key2){
-          return typeof obj[key2] != "undefined" && obj[key2] != null;
-        });
-        if ( tmp.length > 1 )
-          print("Found multiple mappings for " + key);
-        if ( tmp.length > 0 )
-          return tmp[0];
-      }
-      return key;
-    }
-    var getRealMethodKeys = function(key) {
-      var result = [];
-      if ( hasKey(vanilla.revMethods, key) ) {
-        vanilla.revMethods[key].forEach(function(key2){
-          if ( typeof obj[key2] != "undefined" && obj[key2] != null )
-            result.push(key2);
-        });
-      }
-      if ( typeof obj[key] != "undefined" && obj[key] != null )
-        result.push(key);
-      return result;
-    };
     return new JSAdapter({
       __get__ : function(key) {
         if ( key == vanilla.wrapedName )
           return obj;
-        return vanilla.to(obj[getRealFieldKey(key)]);
+        return vanilla.to(obj[getRealKey(obj, key)]);
       },
       __put__ : function(key, value, strict) {
-        return vanilla.to(obj[getRealFieldKey(key)] = value);
+        return vanilla.to(obj[getRealKey(obj, key)] = value);
       },
       __call__ : function(name) {
         if ( name == "toString" ) {
-          // Java Class wrapepr don't have a toString, so we give them one
+          // Java Class wrappers don't have a toString, so we give them one
           if ( typeof obj.class != "undefined" && obj.class instanceof Class && obj.class.static == obj ) {
-            return "[adapted]" + obj;
+            return function(){"[adapted]" + obj};
           }
         }
-        var keys = getRealMethodKeys(name);
-        if ( keys.length <= 0 )
-          throw new TypeError(name + " is not a function");
-        var args = [obj,keys[0]];
+        var key = getRealKey(obj, name);
+        var args = [obj,key];
         for ( var i = 1; i < arguments.length; i++ )
           args.push(vanilla.unwrap(arguments[i]));
-        var firstErr = null;
-        for ( var i = 0; i < keys.length; i++ ) {
-          args[1] = keys[i];
-          try {
-            return vanilla.to(getFunctionWrapper(arguments.length-1).apply(null,args));
-          }catch(e){
-            if ( e instanceof TypeError ) {
-              if ( ! firstErr )
-                firstErr = e;
-            }else{
-              throw e;
-            }
-          }
-        }
-        // we'll only get here if every attempted method threw a TypeError
-        throw new TypeError("issue on all keys [" + keys + "]");
+        return vanilla.to(getFunctionWrapper(arguments.length-1).apply(null,args));
       },
       __new__ : function() {
         var args = [obj];
@@ -188,10 +195,8 @@
       __getIds__ : function() {
         var arr = [];
         for ( key in obj ) {
-          if ( hasKey(vanilla.fields, key) ) {
-            arr.push(vanilla.fields[key]);
-          } else if ( hasKey(vanilla.methods, key) ) {
-            arr.push(vanilla.methods[key]);
+          if ( hasKey(vanilla.forward, key) ) {
+            arr.push(vanilla.forward[key].name);
           } else {
             arr.push(key);
           }
@@ -202,17 +207,17 @@
         
       },*/ // same as __getIds__, but __getIds__ takes precidence
       __getValues__ : function() {
-        var arr = []
+        var arr = [];
         for each ( e in obj ) {
-          arr.push(e);
+          arr.push(vanilla.wrap(e));
         }
         return e;
       },
       __has__ : function(key) {
-        return getRealFieldKey(key) in obj;
+        return getRealKey(obj, key) in obj;
       },
       __delete__ : function(key, strict) {
-        return delete obj[key]
+        return delete obj[getRealKey(obj, key)]
       },
       __preventExtensions__ : function() {
         return obj.preventExtensions.apply(obj, arguments);
@@ -241,8 +246,26 @@
       return obj[vanilla.wrapedName];
     return obj
   };
+  vanilla.getDescription = function(obj, key) {
+    var realObj = vanilla.unwrap(obj);
+    var entry = vanilla.forward[getRealKey(realObj, key)];
+    if ( entry.searge.startsWith("field_") ) {
+      return entry.name + ": " + entry.desc;
+    } else if ( entry.searge.startsWith("method_") ) {
+      var paramBase = "p_" + /\d+/.exec(entry.searge) + "_";
+      var args = [];
+      var i = 0;
+      if ( ! ((paramBase + "0_") in vanilla.params) ) {
+        i = 1;
+      }
+      while ( (paramBase + i + "_") in vanilla.params ) {
+        args.push(vanilla.params[paramBase+i+"_"].name);
+      }
+      return entry.name + "(" + args.join(", ") + "): " + entry.desc;
+    }
+  }
   vanilla.translate = function(str) {
     return vanilla.unwrap(vanilla.wrap(StatCollector).translateToLocal(str));
   }
   return vanilla;
-});
+})();
