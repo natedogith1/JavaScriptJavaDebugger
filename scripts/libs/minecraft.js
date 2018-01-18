@@ -12,9 +12,19 @@
     translate: null, // translates the string into human-intended text
   };
   var debugUtils = shell.loadLib("debugUtils");
+  var minecraftVersion;
   
+  var RealmsSharedConstants = debugUtils.findClass("net.minecraft.realms.RealmsSharedConstants");
+  var MinecraftForge = debugUtils.findClass("net.minecraftforge.common.MinecraftForge");
+  if ( RealmsSharedConstants ) {
+    minecraftVersion = RealmsSharedConstants.static.VERSION_STRING;
+  } else if ( MinecraftForge ) {
+      minecraftVersion = MinecraftForge.static.MC_VERSION;
+  } else {
+    throw "could not find class net.minecraft.realms.RealmsSharedConstants or net.minecraftforge.common.MinecraftForge";
+  }
   var Class = Java.type("java.lang.Class");
-  //var StatCollector = debugUtils.findClass("net.minecraft.util.StatCollector").static;
+  var StatCollector = debugUtils.findClass("net.minecraft.util.StatCollector").static;
   var URL = Java.type("java.net.URL");
   var InputStreamReader = Java.type("java.io.InputStreamReader");
   var StringBuilder = Java.type("java.lang.StringBuilder");
@@ -22,13 +32,6 @@
   var ZipInputStream = Java.type("java.util.zip.ZipInputStream");
   var byteArray = Java.type("byte[]");
   var javaString = Java.type("java.lang.String");
-  
-  // var RealmsSharedConstants = debugUtils.findClass("net.minecraft.realms.RealmsSharedConstants");
-  // if ( ! RealmsSharedConstants ) {
-    // throw "could not find class net.minecraft.realms.RealmsSharedConstants";
-  // }
-  // var minecraftVersion = RealmsSharedConstants.static.VERSION_STRING;
-  var minecraftVersion = "1.7.10";
   
   // based on https://github.com/bspkrs/MCPMappingViewer/
   var versionURL = new URL("http://export.mcpbot.bspk.rs/versions.json");
@@ -56,9 +59,15 @@
     if ( ! zipEntry.getName().endsWith(".csv") ) {
       continue;
     }
-    var byteBuffer = new byteArray(zipEntry.getSize());
-    mappingZipStream.read(byteBuffer, 0, zipEntry.getSize());
-    var str = new javaString(byteBuffer);
+    var byteBuffer = new byteArray(1024);
+    var stringBuilder = new StringBuilder();
+    var pos = 0;
+    while ( pos < zipEntry.getSize() ) {
+        var countRead = mappingZipStream.read(byteBuffer);
+        stringBuilder.append(new javaString(byteBuffer, 0, countRead));
+        pos += countRead;
+    }
+    var str = stringBuilder.toString();
     var strChars = str.split("");
     var lines = [[]];
     var curSegment = "";
@@ -71,7 +80,7 @@
           curSegment += '"';
           i++;
         } else {
-          // do nothing
+            inQuoted = false;
         }
       } else if ( strChars[i] == "," && ! inQuoted ) {
         lines[lines.length-1].push(curSegment);
@@ -80,6 +89,7 @@
         lines[lines.length-1].push(curSegment);
         curSegment = "";
         lines.push([]);
+        i++;
       } else {
         curSegment += strChars[i];
       }
@@ -142,36 +152,58 @@
         "return new object(" + args + ");");
     }
     return newWrapperCache[arity];
-  }
-  var getRealKey = function(obj, key) {
-    if ( hasKey(vanilla.backward, key ) ) {
-      var tmp = vanilla.backwards[key].filter(function(entry){
-        return entry.searge in obj;
-      });
-      if ( tmp.length > 1 ) {
-        print("Found multiple mappings for " + key);
-      } else if ( tmp.length > 0 ) {
-        return tmp[0].searge;
-      }
-    }
-    return key;
   };
+  var hasKey = function(obj, key) {
+      return Object.prototype.hasOwnProperty.call(obj,key);
+  };
+  var getRealKeys = function(obj, key) {
+    var tmp;
+    if ( hasKey(vanilla.backward, key) ) {
+      tmp = vanilla.backward[key].map(function(entry){
+        return entry.searge;
+      })
+    } else {
+      tmp = [];
+    }
+    tmp.unshift(key);
+    return tmp.filter(function(searge){
+      try { 
+        return obj.getField(searge);
+      } catch (e) {
+        return obj[searge] != null;
+      }
+    });
+  }
+  var getRealKeyRaw = function(obj, key) {
+    var keys = getRealKeys(obj, key);
+    if ( keys.length > 1 ) {
+      print("Found multiple mappings for " + key);
+    } else if ( keys.length > 0 ) {
+      return keys[0];
+    } else {
+      return undefined;
+    }
+  };
+  var getRealKey = function(obj, key) {
+      var realKey = getRealKeyRaw(obj, key);
+      if ( realKey === undefined ) {
+        throw new Error(key + " does not exist");
+      }
+      return realKey;
+  }
   vanilla.wrap = function(obj) {
     if ( primitiveTypes[typeof obj] || obj === null )
       return obj; // return primitives unmodified
     if ( vanilla.unwrap(obj) != obj ) //this is already a wraped object
       return obj; // don't wrap a wraper
-    var hasKey = function(obj,key) {
-      return Object.prototype.hasOwnProperty.call(obj,key);
-    };
     return new JSAdapter({
       __get__ : function(key) {
         if ( key == vanilla.wrapedName )
           return obj;
-        return vanilla.to(obj[getRealKey(obj, key)]);
+        return vanilla.wrap(obj[getRealKey(obj, key)]);
       },
       __put__ : function(key, value, strict) {
-        return vanilla.to(obj[getRealKey(obj, key)] = value);
+        return vanilla.wrap(obj[getRealKey(obj, key)] = value);
       },
       __call__ : function(name) {
         if ( name == "toString" ) {
@@ -180,17 +212,34 @@
             return function(){"[adapted]" + obj};
           }
         }
-        var key = getRealKey(obj, name);
-        var args = [obj,key];
+        var keys = getRealKeys(obj, name);
+        if ( keys.length <= 0 )
+          throw new Error(name + " does not exist");
+        var args = [obj,keys[0]];
         for ( var i = 1; i < arguments.length; i++ )
           args.push(vanilla.unwrap(arguments[i]));
-        return vanilla.to(getFunctionWrapper(arguments.length-1).apply(null,args));
+        var firstErr = null;
+        for ( var i = 0; i < keys.length; i++ ) {
+          args[1] = keys[i];
+          try {
+            return vanilla.wrap(getFunctionWrapper(arguments.length-1).apply(null,args));
+          }catch(e){
+            if ( e instanceof TypeError ) {
+              if ( ! firstErr )
+                firstErr = e;
+            }else{
+              throw e;
+            }
+          }
+        }
+        // we'll only get here if every attempted method threw a TypeError
+        throw new TypeError("issue on all keys [" + keys + "]");
       },
       __new__ : function() {
         var args = [obj];
         for ( var i = 1; i < arguments.length; i++ )
           args.push(vanilla.unwrap(arguments[i]));
-        return vanilla.to(getNewWrapper(arguments.length).apply(null,args));
+        return vanilla.wrap(getNewWrapper(arguments.length).apply(null,args));
       },
       __getIds__ : function() {
         var arr = [];
@@ -214,10 +263,10 @@
         return e;
       },
       __has__ : function(key) {
-        return getRealKey(obj, key) in obj;
+        return getRealKeyRaw(obj, key) in obj;
       },
       __delete__ : function(key, strict) {
-        return delete obj[getRealKey(obj, key)]
+        return delete obj[getRealKeyRaw(obj, key)]
       },
       __preventExtensions__ : function() {
         return obj.preventExtensions.apply(obj, arguments);
@@ -251,7 +300,7 @@
     var entry = vanilla.forward[getRealKey(realObj, key)];
     if ( entry.searge.startsWith("field_") ) {
       return entry.name + ": " + entry.desc;
-    } else if ( entry.searge.startsWith("method_") ) {
+    } else if ( entry.searge.startsWith("func_") ) {
       var paramBase = "p_" + /\d+/.exec(entry.searge) + "_";
       var args = [];
       var i = 0;
@@ -260,6 +309,7 @@
       }
       while ( (paramBase + i + "_") in vanilla.params ) {
         args.push(vanilla.params[paramBase+i+"_"].name);
+        i++;
       }
       return entry.name + "(" + args.join(", ") + "): " + entry.desc;
     }
