@@ -32,6 +32,9 @@
   var ZipInputStream = Java.type("java.util.zip.ZipInputStream");
   var byteArray = Java.type("byte[]");
   var javaString = Java.type("java.lang.String");
+  var Modifier = Java.type("java.lang.reflect.Modifier");
+  var MinecraftServer = debugUtils.findClass("net.minecraft.server.MinecraftServer").static;
+  var DimensionManager = debugUtils.findClass("net.minecraftforge.common.DimensionManager").static;
   
   // based on https://github.com/bspkrs/MCPMappingViewer/
   var versionURL = new URL("http://export.mcpbot.bspk.rs/versions.json");
@@ -301,21 +304,42 @@
     if ( entry.searge.startsWith("field_") ) {
       return entry.name + ": " + entry.desc;
     } else if ( entry.searge.startsWith("func_") ) {
+      var methods = realObj.class.getMethods()
+      var method;
+      for each ( var m in methods ) {
+          if ( m.getName() == entry.searge ) {
+              method = m;
+              break;
+          }
+      }
       var paramBase = "p_" + /\d+/.exec(entry.searge) + "_";
       var args = [];
-      var i = 0;
-      if ( ! ((paramBase + "0_") in vanilla.params) ) {
-        i = 1;
+      var offset = 1;
+      if ( Modifier.isStatic(m.getModifiers()) ) {
+          offset = 0;
       }
-      while ( (paramBase + i + "_") in vanilla.params ) {
-        args.push(vanilla.params[paramBase+i+"_"].name);
-        i++;
+      var argTypes = m.getParameterTypes();
+      for ( var i = 0; i < argTypes.length; i++ ) {
+        if ( vanilla.params[paramBase+(i+offset)+"_"].name ) {
+          args.push(argTypes[i].getName() + " " + vanilla.params[paramBase+(i+offset)+"_"].name);
+        } else {
+          args.push(argTypes[i].getName());
+        }
       }
-      return entry.name + "(" + args.join(", ") + "): " + entry.desc;
+      return m.getReturnType().getName() + " " + entry.name + "(" + args.join(", ") + "): " + entry.desc;
     }
   }
   vanilla.translate = function(str) {
     return vanilla.unwrap(vanilla.wrap(StatCollector).translateToLocal(str));
+  }
+  vanilla.getPlayer = function(str) {
+      return vanilla.wrap(MinecraftServer).getServer().getConfigurationManager().getPlayerByUsername(str);
+  }
+  vanilla.getWorld = function(id) {
+      return vanilla.wrap(DimensionManager).getWorld(id);
+  }
+  vanilla.runOnMainThread = function(func) {
+      return vanilla.wrap(MinecraftServer).getServer().addScheduledTask(func);
   }
   return vanilla;
 })();
