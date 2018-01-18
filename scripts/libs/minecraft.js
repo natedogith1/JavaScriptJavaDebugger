@@ -10,6 +10,8 @@
     wrap: null, // wraps object
     getDescription: null, // getDescription(object, field or method name), returns the descriptive text for a method or field fo an object
     translate: null, // translates the string into human-intended text
+    getPlayer: null, // gets a player by username
+    getWorld: null, // gets the world by id
   };
   var debugUtils = shell.loadLib("debugUtils");
   var minecraftVersion;
@@ -333,13 +335,10 @@
     return vanilla.unwrap(vanilla.wrap(StatCollector).translateToLocal(str));
   }
   vanilla.getPlayer = function(str) {
-      return vanilla.wrap(MinecraftServer).getServer().getConfigurationManager().getPlayerByUsername(str);
+    return vanilla.wrap(MinecraftServer).getServer().getConfigurationManager().getPlayerByUsername(str);
   }
   vanilla.getWorld = function(id) {
-      return vanilla.wrap(DimensionManager).getWorld(id);
-  }
-  vanilla.runOnMainThread = function(func) {
-      return vanilla.wrap(MinecraftServer).getServer().addScheduledTask(func);
+    return vanilla.wrap(DimensionManager).getWorld(id);
   }
   return vanilla;
 })();
