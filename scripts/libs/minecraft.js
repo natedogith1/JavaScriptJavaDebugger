@@ -320,7 +320,7 @@
       }
       var argTypes = m.getParameterTypes();
       for ( var i = 0; i < argTypes.length; i++ ) {
-        if ( vanilla.params[paramBase+(i+offset)+"_"].name ) {
+        if ( vanilla.params[paramBase+(i+offset)+"_"] ) {
           args.push(argTypes[i].getName() + " " + vanilla.params[paramBase+(i+offset)+"_"].name);
         } else {
           args.push(argTypes[i].getName());
