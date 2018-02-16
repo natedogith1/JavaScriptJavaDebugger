@@ -226,7 +226,6 @@
         startIndex: int, the index of the first opcode where this local variable has a value (default: no default)
         length: int, how many indexes this local variable is vlaid for (indexes, not opcodes) (default: no default)
         index: the index of the local variable (default: no default)
-        
     }
     {
         targetType: "resourceVariable" string, a variable declared in a try-with-resources statement (try(@A AutoCloseable resource = arg){})
@@ -366,7 +365,6 @@
         type: "methodType" string
         parameters: array of class objects, the argument types of this method type
         returnType: class object, the return type of this method type, null maps to void
-        
     }
     {
         type: "invokeDynamic" string
@@ -383,6 +381,7 @@
     var Base64 = Java.type("java.util.Base64");
     var javaObject = Java.type("java.lang.Object");
     var javaClass = Java.type("java.lang.Class");
+    var HashMap = Java.type("java.util.HashMap");
     
     var rootClassLoader = new (Java.extend(ClassLoader))({});
     var rootClassLoaderSuper = Java.super(rootClassLoader);
@@ -453,11 +452,13 @@
     
     var GeneratingClassLoader = rootClassLoaderSuper.defineClass("GeneratingClassLoader", GeneratingClassLoaderBytes, 0, GeneratingClassLoaderBytes.length).static;
     
-    function convertToClassString(obj) {
+    function defaultClassNameMapper(obj) {
         if ( obj instanceof javaClass ) {
+            return obj.getName();
+        } else if ( typeof obj === "string" ) {
             return obj;
         } else {
-            return obj.class;
+            return obj.class.getName();
         }
     }
     
@@ -465,9 +466,9 @@
         return obj in name && (obj[name] !== null && obj[name] !== undefined);
     }
     
-    function classMaker.getClassBytes(description, classNameMapper) {
+    function classMaker.getClassBytes(description) {
         if ( ! classNameMapper ) {
-            classNameMapper = 
+            classNameMapper = defaultClassNameMapper
         }
         
         if ( isSet(description, "name") ) {
@@ -491,7 +492,85 @@
         var constantRefs = {
             classes: {}
         }
-        var constantCount = 0;
+        var constantId = 1;
+        
+        var constantData = new ByteArrayOutputStream();
+        var constantStream = new DataOutputStream(constantData);
+        
+        function toDescriptor(obj){
+            // TODO implement
+        }
+        
+        var constants = {
+            classes: {},
+            fields: {},
+            methods: {},
+            strings: {},
+            integers: {},
+            floats: {},
+            longs: {},
+            doubles: {},
+            nameAndTypes: {},
+            utf8s: {},
+            methodHandles: {},
+            methodTypes: {},
+            invokeDynamics: {},
+        }
+        
+        
+        
+        function getConstantIndex(constant) {
+            var mappingName;
+            switch(constant.type) {
+                case "class":
+                    mappedName = classNameMapper(constant.name)
+                    if ( ! (mappedName in constants.classes) ) {
+                        var name = getConstantIndex({type:"utf8", value:mappedName});
+                        constantStream.writeByte(7);
+                        constantStream.writeShort(name);
+                        constants.classes[mappedName] = constantId++;
+                    }
+                    return constants.classes[mappedName];
+                case "field":
+                    mappedName = [classNameMapper(constant.clazz), constant.name, toDescriptor(constant.type)].join(";");
+                    if ( ! (mappedName in constants.fields) ) {
+                        var clazz = getConstantIndex({type:"class", name:constant.clazz});
+                        var nameAndType = getConstantIndex({type:"nameAndType", name:constant.name, descriptor:constant.type});
+                        constantStream.writeByte(9);
+                        constantStream.writeShort(clazz);
+                        constantStream.writeShort(nameAndType);
+                        constants.fields[mappedName] = constantId++;
+                    }
+                    return constants.fields[mappedName];
+                case "method":
+                case "interfaceMethod":
+                    mappedName = [classNameMapper(constant.clazz), constant.name, toDescriptor(constant.parameters), toDescriptor(constant.returnType)].join(";");
+                    if ( ! (mappedName in constants.methods) ) {
+                        var clazz = getConstantIndex({type:"class", name:constant.clazz});
+                        var nameAndType = getConstantIndex({type:"nameAndType", name:constant.name, descriptor:{parameters:constant.parameters, returnType:constant.returnType}});
+                        constantStream.writeByte(constant.type === "method" ? 10 : 11);
+                        constantStream.writeShort(clazz);
+                        constantStream.writeShort(nameAndType);
+                        constants.methods[mappedName] = constantId++;
+                    }
+                    return constants.methods[mappedName];
+                case "string":
+                    mappedName = constant.value;
+                    if ( ! (mappedName in constans.strings) ) {
+                        var value = getConstantIndex({type:"utf8", value:constant.value});
+                        constantStream.writeByte(8);
+                        constantStream.writeShort(value);
+                        constants.strings[mappedName] = constantId++;
+                    }
+                    return constants.strings[mappedName];
+            }
+        }
+        
+        
+        
+        
+        var postConstantData = new ByteArrayOutputStream();
+        var postConstantStream = new DataOutputStream(constantData);
         
         var classData = new ByteArrayOutputStream();
         var classStream = new DataOutputStream(classData);
