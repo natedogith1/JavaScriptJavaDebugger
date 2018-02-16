@@ -12,8 +12,8 @@
     {
         name: string, the name of the class in java format (default: "createdPackage.CreatedClass" followed by random numbers)
         accessFlags: int, the OR'd together access flags for the class (look in java.lang.reflect.Modifier), ACC_SUPER (0x0020) will be added to this (default: ACC_SUPER | PUBLIC)
-        superClass: class object, the super class of this class, abstract methods will be auto-added (default: java.lang.Object)
-        interfaces: array of class objects, the interfaces this class implements, methods will be auto-added (default: empty array)
+        superClass: class object, the super class of this class (default: java.lang.Object)
+        interfaces: array of class objects, the interfaces this class implements (default: empty array)
         fields: array of the following complex type (default: empty array)
         {
             accesFlags: int, the OR'd together access flags for this method (look in java.lang.reflect.Modifier) (default: PUBLIC)
@@ -183,79 +183,121 @@
     //typeAnnotation object:
     one of the following objects
     {
-        targetType: "class" string, a generic parameter on the class
+        targetType: "class" string, a generic parameter on the class (public class Example <@A K>)
         parameterIndex: int, the index of the parameter (default: 0)
     }
     {
-        targetType: "method" string, a generic parameter on a method
+        targetType: "method" string, a generic parameter on a method (public <A@ K> K method())
         parameterIndex: int, the index of the parameter (default: 0)
     }
     {
-        targetType: "super" string, an extended class or interface
-        interfaceIndex: int, the index of the implemented interface (-1 for super class) (default: -1)
+        targetType: "super" string, an extended class or interface (public class Example extends @A Object)
+        interfaceIndex: int, the index of the implemented interface, or -1 for super class (default: -1)
     }
     {
-        targetType: "11" string, 
+        targetType: "classBound" string, the wildcard on a class generic parameter (public class Example <K extends @A Object> {})
+        genericIndex: int, the index of the generic (in <K,T>, K would be 0, T would be 1) (default: 0)
+        boundIndex: int, which entry in the bound (in <K extends Object & Iterable<K>>, Object would be 0, Iterable<K> would be 1) (default: 0)
     }
     {
-        targetType: "12" string, 
+        targetType: "methodBound" string, the wildcard on a method generic parameter (public <K extends @A Object> K method(){return null;})
+        genericIndex: int, the index of the generic (in <K,T>, K would be 0, T would be 1) (default: 0)
+        boundIndex: int, which entry in the bound (in <K extends Object & Iterable<K>>, Object would be 0, Iterable<K> would be 1) (default: 0)
     }
     {
-        targetType: "13" string, 
+        targetType: "field" string, a field descriptor (public @A Object field;)
     }
     {
-        targetType: "14" string, 
+        targetType: "methodReturn" string, a method return type (public @A Object method(){return null;})
     }
     {
-        targetType: "15" string, 
+        targetType: "methodThis" string or "methodReciever" string, the this of a method (public void method(@A Example this){})
     }
     {
-        targetType: "16" string, 
+        targetType: "methodParameter" string, a method's argument (public void method(@Test arg0){})
+        parameterIndex: int, the index of the parameter (default: 0)
     }
     {
-        targetType: "17" string, 
+        targetType: "methodThrows" string, a class in the throws clause of a method (public void method() throws @A Throwable {})
+        exceptionIndex: int, the index 
     }
     {
-        targetType: "40" string, 
+        targetType: "localVariable" string, a variable in a method (@A Object local; local.hashCode();)
+        startIndex: int, the index of the first opcode where this local variable has a value (default: no default)
+        length: int, how many indexes this local variable is vlaid for (indexes, not opcodes) (default: no default)
+        index: the index of the local variable (default: no default)
+        
     }
     {
-        targetType: "41" string, 
+        targetType: "resourceVariable" string, a variable declared in a try-with-resources statement (try(@A AutoCloseable resource = arg){})
+        startIndex: int, the index of the first opcode where this local variable has a value (default: no default)
+        length: int, how many indexes this local variable is vlaid for (indexes, not opcodes) (default: no default)
+        index: the index of the local variable (default: no default)
     }
     {
-        targetType: "42" string, 
+        targetType: "exceptionParameter" string, a variable declared in a catch clause (try{arg.hashCode();}catch(@A Throwable e){e.hashCode();})
+        exceptionIndex: int, an index into the exceptionHandlers of this method's code specifying which catch clause this belongs to (default: no default)
     }
     {
-        targetType: "43" string, 
+        targetType: "instanceof", a type used as part of instanceof (if(arg instanceof @A Object){})
+        index: int, index into code array specifying the instruction this is part of (default: no default)
     }
     {
-        targetType: "44" string, 
+        targetType: "new" string, a type that new is called on (new @A Object();)
+        index: int, index into code array specifying the instruction this is part of (default: no default)
     }
     {
-        targetType: "45" string, 
+        targetType: "dynamicNew" string, ::new as used as part of lambdas (java.util.function.Supplier<Object> local = @A Object::new)
+        index: int, index into code array specifying the instruction this is part of (default: no default)
     }
     {
-        targetType: "46" string, 
+        targetType: "dynamicMethod" string, ::method as used as part of lambdas (java.util.function.Supplier<?> local  = @A java.util.function.UnaryOperator::identity;)
+        index: int, index into code array specifying the instruction this is part of (default: no default)
     }
     {
-        targetType: "47" string, 
+        targetType: "cast" string, a type used in casting (arg = (@A Object) arg;)
+        index: int, index into code array specifying the instruction this is part of (default: no default)
+        typeIndex: int, which type to target (in (Object & Cloneable), Object would be 0, Cloneable would be 1) (default: 0)
     }
     {
-        targetType: "48" string, 
+        targetType: "newType" string, the type specifier for a constructor method call (new <@A Object> java.util.LinkedList<Object>(null);)
+        index: int, index into code array specifying the instruction this is part of (default: no default)
+        typeIndex: int, which type to target (in (Object & Cloneable), Object would be 0, Cloneable would be 1) (default: 0)
     }
     {
-        targetType: "49" string, 
+        targetType: "methodType" string, the type specifier for a method call (java.util.Arrays.<@A Object> asList();)
+        index: int, index into code array specifying the instruction this is part of (default: no default)
+        typeIndex: int, which type to target (in (Object & Cloneable), Object would be 0, Cloneable would be 1) (default: 0)
     }
     {
-        targetType: "4A" string, 
+        targetType: "dynamicNewType" string, the type specifier for a ::new (java.util.function.Supplier<Object> local = java.util.LinkedList<Object>::<@A Object> new;)
+        index: int, index into code array specifying the instruction this is part of (default: no default)
+        typeIndex: int, which type to target (in (Object & Cloneable), Object would be 0, Cloneable would be 1) (default: 0)
     }
     {
-        targetType: "4B" string, 
+        targetType: "dynamicMethodType" string, the type specifier for a ::method (java.util.function.Supplier<?> local  = java.util.function.UnaryOperator::<@A Object>identity;)
+        index: int, index into code array specifying the instruction this is part of (default: no default)
+        typeIndex: int, which type to target (in (Object & Cloneable), Object would be 0, Cloneable would be 1) (default: 0)
     }
     
     // verificationType object:
+    one of the following:
+    "top" string, the other half of a double or long
+    "int" string
+    "float" string
+    "null" string
+    "uninitializedThis" string
     {
-        
+        type: "object" string
+        value: class object, the type of the object
     }
+    {
+        type: "uninitialized" string
+        newOffset: int, the index of the 'new' instruction that created this
+    }
+    "long" string
+    "double" string
+    
     
     // customAttribute object:
     byte array or
