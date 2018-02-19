@@ -47,7 +47,7 @@
                     code: following complex object, the bytecode for this method (default: no default)
                     {
                         code: array of bytes/byte array, the bytecode for this method (default: no default)
-                        constants: array of following complex type, maps where to place indexes of constants into the code (default: no default)
+                        constants: array of following complex type, maps where to place indexes of constants into the code (default: empty array)
                         {
                             address: the address to write the 2-byte index of the constant (default: no default)
                             constant: a constant object (see bellow), the constant to reference (default: no default)
@@ -147,7 +147,7 @@
     // class object:
     java Class<?> object or
     nashorn static class object or
-    string matching a java-format class name
+    string matching a java-format (not internal format) class name
     
     // signature object:
     class object or
@@ -219,7 +219,7 @@
     }
     {
         targetType: "methodThrows" string, a class in the throws clause of a method (public void method() throws @A Throwable {})
-        exceptionIndex: int, the index 
+        exceptionIndex: int, the index
     }
     {
         targetType: "localVariable" string, a variable in a method (@A Object local; local.hashCode();)
@@ -250,7 +250,7 @@
         index: int, index into code array specifying the instruction this is part of (default: no default)
     }
     {
-        targetType: "dynamicMethod" string, ::method as used as part of lambdas (java.util.function.Supplier<?> local  = @A java.util.function.UnaryOperator::identity;)
+        targetType: "dynamicMethod" string, ::method as used as part of lambdas (java.util.function.Supplier<?> local = @A java.util.function.UnaryOperator::identity;)
         index: int, index into code array specifying the instruction this is part of (default: no default)
     }
     {
@@ -274,7 +274,7 @@
         typeIndex: int, which type to target (in (Object & Cloneable), Object would be 0, Cloneable would be 1) (default: 0)
     }
     {
-        targetType: "dynamicMethodType" string, the type specifier for a ::method (java.util.function.Supplier<?> local  = java.util.function.UnaryOperator::<@A Object>identity;)
+        targetType: "dynamicMethodType" string, the type specifier for a ::method (java.util.function.Supplier<?> local = java.util.function.UnaryOperator::<@A Object>identity;)
         index: int, index into code array specifying the instruction this is part of (default: no default)
         typeIndex: int, which type to target (in (Object & Cloneable), Object would be 0, Cloneable would be 1) (default: 0)
     }
@@ -299,10 +299,23 @@
     
     
     // customAttribute object:
-    byte array or
+    one of
+    {
+        array: byte array, the data for this entry (default: no default)
+        constants:  array of following complex type, maps where to place indexes of constants into the attribute (default: empty array)
+        {
+            address: the address to write the 2-byte index of the constant (default: no default)
+            constant: a constant object, the constant to reference (default: no default)
+        }
+    }
     {
         size: size of this entry (up to 2^32 - 1)
         stream: stream to read this entry from, will read size bytes
+        constants:  array of following complex type, maps where to place indexes of constants into the attribute (default: empty array)
+        {
+            address: the address to write the 2-byte index of the constant (default: no default)
+            constant: a constant object, the constant to reference (default: no default)
+        }
     }
     
     // constant object:
@@ -329,7 +342,7 @@
         value: string, the value of this string
     }
     {
-        type: string, one of "integer", "float", "long", "double"
+        type: string, one of "integer" or "int", "float", "long", "double"
         value: number, the value of this number
     }
     {
@@ -350,7 +363,7 @@
         kind: string, one of "getField", "getStatic", "putField", "putStatic"
         clazz: class object, the class that contains the target field
         name: string, the name of the target field
-        type: class object, the type of the target field
+        descriptor: class object, the type of the target field
     }
     {
         type: "methodHandle" string
@@ -382,6 +395,7 @@
     var javaObject = Java.type("java.lang.Object");
     var javaClass = Java.type("java.lang.Class");
     var HashMap = Java.type("java.util.HashMap");
+    var nashornClass = Java.type("jdk.internal.dynalink.beans.StaticClass");
     
     var rootClassLoader = new (Java.extend(ClassLoader))({});
     var rootClassLoaderSuper = Java.super(rootClassLoader);
@@ -452,14 +466,38 @@
     
     var GeneratingClassLoader = rootClassLoaderSuper.defineClass("GeneratingClassLoader", GeneratingClassLoaderBytes, 0, GeneratingClassLoaderBytes.length).static;
     
+    function getClassObject(obj) {
+        if ( obj instanceof javaClass ) {
+            return obj;
+        } else if ( obj instanceof nashornClass ) {
+            return obj.class;
+        } else {
+            return null;
+        }
+    }
+    
     function defaultClassNameMapper(obj) {
         if ( obj instanceof javaClass ) {
             return obj.getName();
+        } else if ( obj instanceof nashornClass ) {
+            return obj.class.getName();
         } else if ( typeof obj === "string" ) {
             return obj;
         } else {
-            return obj.class.getName();
+            return null;
         }
+    }
+    
+    var methodHandleKindMapping = {
+        "getField": 1,
+        "getStatic": 2,
+        "putField": 3,
+        "putStatic": 4,
+        "invokeVirtual": 5,
+        "invokeStatic": 6,
+        "invokeSpecial": 7,
+        "newInvokeSpecial": 8,
+        "invokeInterface": 9,
     }
     
     function isSet(name, obj) {
@@ -521,7 +559,7 @@
         
         function getConstantIndex(constant) {
             var mappingName;
-            switch(constant.type) {
+            switch ( constant.type ) {
                 case "class":
                     mappedName = classNameMapper(constant.name)
                     if ( ! (mappedName in constants.classes) ) {
@@ -555,7 +593,7 @@
                     }
                     return constants.methods[mappedName];
                 case "string":
-                    mappedName = constant.value;
+                    mappedName = "" + constant.value;
                     if ( ! (mappedName in constans.strings) ) {
                         var value = getConstantIndex({type:"utf8", value:constant.value});
                         constantStream.writeByte(8);
@@ -563,6 +601,108 @@
                         constants.strings[mappedName] = constantId++;
                     }
                     return constants.strings[mappedName];
+                case "integer":
+                case "int":
+                    mappedName = constant.value;
+                    if ( ! (mappedName in constants.integers) ) {
+                        constantStream.writeByte(3);
+                        constantStream.writeInt(constant.value);
+                        constants.integers[mappedName] = constantId++;
+                    }
+                    return constants.integers[mappedName];
+                case "float":
+                    mappedName = constant.value;
+                    if ( ! (mappedName in constants.floats) ) {
+                        constantStream.writeByte(4);
+                        constantStream.writeFloat(constant.value);
+                        constants.floats[mappedName] = constantId++;
+                    }
+                    return constants.floats[mappedName];
+                case "long":
+                    mappedName = constant.value;
+                    if ( ! (mappedName in constants.longs) ) {
+                        constantStream.writeByte(5);
+                        constantStream.writeLong(constant.value);
+                        constants.longs[mappedName] = constantId++;
+                    }
+                    return constants.longs[mappedName];
+                case "double":
+                    mappedName = constant.value;
+                    if ( ! (mappedName in constants.doubles) ) {
+                        constantStream.writeByte(6);
+                        constantStream.writeDouble(constant.value);
+                        constants.doubles[mappedName] = constantId++;
+                    }
+                    return constants.doubles[mappedName];
+                case "nameAndType":
+                    mappedName = [constant.name, toDescriptor(constant.descriptor)];
+                    if ( ! (mappedName in constants.nameAndTypes) ) {
+                        var name = getConstantIndex({type:"utf8", value:constant.name});
+                        var descriptor = getConstantIndex({type:"utf8", value:toDescriptor(constant.descriptor)});
+                        constantStream.writeByte(12);
+                        constantStream.writeShort(name);
+                        constantStream.writeShort(descriptor);
+                        constants.nameAndTypes[mappedName] = constantId++;
+                    }
+                    return constants.nameAndType[mappedName];
+                case "utf8":
+                    mappedName = constant.value;
+                    if ( ! (mappedName in constants.utf8s) ) {
+                        constantStream.writeByte(1);
+                        constantStream.writeUTF(constant.value);
+                        constants.utf8s[mappedName] = constantId++;
+                    }
+                    return constants.utf8s[mappedName];
+                case "methodHandle":
+                    var clazzObject = getClassObject(constant.clazz);
+                    var isInterface = (contant.kind === "invokeStatic" || constant.kind === "invokeSpecial") ? (clazzObject ? clazzObject.isInterface() : !!constant.isInterface) : constant.kind === "invokeInterface";
+                    mappedName = [constant.kind, isInterface, classNameMapper(constant.clazz), constant.name, toDescriptor(constant.fieldType),
+                                  toDescriptor(constant.parameters), toDescriptor(constant.returnType)].join(";");
+                    if ( ! (mappedName in constants.methodHandles) ) {
+                        var ref;
+                        switch ( constant.kind ) {
+                            case "getField":
+                            case "getStatic":
+                            case "putField":
+                            case "putStatic":
+                                ref = getConstantIndex({type:"field", clazz:constant.clazz, name:constant.name, type:constant.fieldType});
+                                break;
+                            case "invokeVirtual":
+                            case "invokeStatic":
+                            case "newInvokeSpecial":
+                            case "invokeInterface":
+                                ref = getConstantIndex({type:(isInterface?"interfaceMethod":"method"), clazz:constant.clazz, name:constant.name, parameters:constant.parameters, returnType:constant.returnType});
+                                break;
+                            default:
+                                throw "unknown methodHandle kind [" + constant.kind + "]";
+                        }
+                        constantStream.writeByte(15);
+                        constantStream.writeByte(methodHandleKindMapping[constant.kind]);
+                        constantStream.writeShort(ref);
+                        constants.methodHandles[mappedName] = constantId++;
+                    }
+                    return constants.methodHandles[mappedName];
+                case "methodType":
+                    mappedName = [toDescriptor(constant.parameters), toDescriptor(constant.returnType)].join(";");
+                    if ( ! (mappedName in constants.methodTypes) ) {
+                        var descriptor = getConstantIndex({type:"utf8", value:toDescriptor({parameters:constant.parameters, returnType:constant.returnType})});
+                        constantStream.writeByte(16);
+                        constantStream.writeShort(descriptor);
+                        constants.methodTypes[mappedName] = constantId++;
+                    }
+                    return constants.methodTypes[mappedName];
+                case "invokeDynamic":
+                    mappedName = [constant.bootstrapIndex, constant.name, toDescriptor(constant.parameters), toDescriptor(constant.returnType)];
+                    if ( ! (mappedName in constants.invokeDynamics) ) {
+                        var nameAndType = getConstantIndex({type:"nameAndType", name:constant.name, descriptor:{parameters:constant.parameters, returnType:constant.returnType}});
+                        constantStream.writeByte(18);
+                        constantStream.writeShort(constant.bootstrapIndex);
+                        constantStream.writeShort(nameAndType);
+                        constants.invokeDynamics[mappedName] = constantId++;
+                    }
+                    return constants.invokeDynamics[mappedName];
+                default:
+                    throw "unknown constant type [" + constant.type + "]";
             }
         }
         
