@@ -66,13 +66,8 @@
                             signature: signature complex object (see bellow), this specifies the type of this local, including generic parts (default: no default)
                             index: the index of the local variable (default: no default)
                         }
-                        stackMap: array of following complex type, specifies the types of local variables and objects on the stack at various points in the code,
-                            this will be turned into an attribute using the shortest forms possible(default: not set, attribute won't be included)
-                        {
-                            offsetDelta: int, the difference between the first instruction this describes and the first instruction the previous entry describes minus 1 (see Java Virtual Machine Specification section 4.7.4) (default: no default)
-                            locals: array of verificationType objects, describes the types of locals, nulls will be treated as unchanged from previous frame, a shorter array will be treated as removed locals (default: same as previous entry)
-                            stack: array of verificationType objects, describes the types of objects on the stack, nulls will be treated as unchanged from previous frame, a shorter array will be treated as removed stack objects (default: same as previous entry)
-                        }
+                        stackMap: array of stackFrame objects, specifies the types of local variables and objects on the stack at various points in the code,
+                            there is an implicit -1st filled from the descriptor (default: not set, attribute won't be included)
                     }
                     customAttributes: array of customAttribute objects, custom attributes to add (default: empty array)
                 }
@@ -157,7 +152,7 @@
     // annotation object:
     {
         type: class object, the type of the annotation (the annotation class) (default: no default)
-        values: map from name of value to the following complex type, the value of the annotation attributes (defaeult: not set)
+        values: map from name of value to annotationValue objects, the value of the annotation attributes (default: not set/empty map)
     }
     
     // annotationValue object:
@@ -170,107 +165,162 @@
     an annotation object or
     an array of annotation values or
     {
-        typeOveride: class object, the type of this value, necessary for when the type is ambigious
+        typeOverride: class object, the type of this value, necessary for when the type is ambiguous
         value: an annotationValue object not of this type
     }
     
-    //typeAnnotation object:
+    // typeAnnotation object:
+    {
+        target: typeAnnotationTarget object, the location of the type this applies to (default: no default)
+        targetPath: array of the following complex types (or strings of the kind), specifies where in the type the annotation is, each entry is a level of depth, see the JVM specification for examples (default: empty array)
+        {
+            kind: one of the following strings, specifies how this path entry drills down a layer
+                "array", is an array type (@A String[])
+                "nested", is a neested type (Foo.@A Bar]
+                "bound", is the bounds of a generic (Generic<? extends @A Object>]
+                "parameter", is the parameter of a generic (Generic<@A ?>)
+            index: int, only meaningful for "parameter" kind, inidicates the index of the parameter (in <K,T>, K would be 0, T would be 1) (default: 0)
+        }
+        annotation: an annotation object, the actual annotation this represents (default: no default)
+    }
+    
+    
+    // typeAnnotationTarget object:
     one of the following objects
     {
-        targetType: "class" string, a generic parameter on the class (public class Example <@A K>)
-        parameterIndex: int, the index of the parameter (default: 0)
+        type: "class" string, a generic parameter on the class (public class Example <@A K>)
+        genericIndex: int, the index of the generic (in <K,T>, K would be 0, T would be 1) (default: 0)
     }
     {
-        targetType: "method" string, a generic parameter on a method (public <A@ K> K method())
-        parameterIndex: int, the index of the parameter (default: 0)
+        type: "method" string, a generic parameter on a method (public <A@ K> K method())
+        genericIndex: int, the index of the generic (in <K,T>, K would be 0, T would be 1) (default: 0)
     }
     {
-        targetType: "super" string, an extended class or interface (public class Example extends @A Object)
+        type: "super" string, an extended class or interface (public class Example extends @A Object)
         interfaceIndex: int, the index of the implemented interface, or -1 for super class (default: -1)
     }
     {
-        targetType: "classBound" string, the wildcard on a class generic parameter (public class Example <K extends @A Object> {})
+        type: "classBound" string, the wildcard on a class generic parameter (public class Example <K extends @A Object> {})
         genericIndex: int, the index of the generic (in <K,T>, K would be 0, T would be 1) (default: 0)
-        boundIndex: int, which entry in the bound (in <K extends Object & Iterable<K>>, Object would be 0, Iterable<K> would be 1) (default: 0)
+        boundIndex: int, which entry in the bound (in <K extends Object & Cloneable>, Object would be 0, Cloneable would be 1) (default: 0)
     }
     {
-        targetType: "methodBound" string, the wildcard on a method generic parameter (public <K extends @A Object> K method(){return null;})
+        type: "methodBound" string, the wildcard on a method generic parameter (public <K extends @A Object> K method(){return null;})
         genericIndex: int, the index of the generic (in <K,T>, K would be 0, T would be 1) (default: 0)
-        boundIndex: int, which entry in the bound (in <K extends Object & Iterable<K>>, Object would be 0, Iterable<K> would be 1) (default: 0)
+        boundIndex: int, which entry in the bound (in <K extends Object & Cloneable>, Object would be 0, Cloneable would be 1) (default: 0)
     }
     {
-        targetType: "field" string, a field descriptor (public @A Object field;)
+        type: "field" string, a field descriptor (public @A Object field;)
     }
     {
-        targetType: "methodReturn" string, a method return type (public @A Object method(){return null;})
+        type: "methodReturn" string, a method return type (public @A Object method(){return null;})
     }
     {
-        targetType: "methodThis" string or "methodReciever" string, the this of a method (public void method(@A Example this){})
+        type: "methodThis" string or "methodReciever" string, the this of a method (public void method(@A Example this){})
     }
     {
-        targetType: "methodParameter" string, a method's argument (public void method(@Test arg0){})
+        type: "methodParameter" string, a method's argument (public void method(@Test arg0){})
         parameterIndex: int, the index of the parameter (default: 0)
     }
     {
-        targetType: "methodThrows" string, a class in the throws clause of a method (public void method() throws @A Throwable {})
+        type: "methodThrows" string, a class in the throws clause of a method (public void method() throws @A Throwable {})
         exceptionIndex: int, the index
     }
     {
-        targetType: "localVariable" string, a variable in a method (@A Object local; local.hashCode();)
-        startIndex: int, the index of the first opcode where this local variable has a value (default: no default)
-        length: int, how many indexes this local variable is vlaid for (indexes, not opcodes) (default: no default)
-        index: the index of the local variable (default: no default)
+        type: "localVariable" string, a variable in a method (@A Object local; local.hashCode();)
+        locations: array of the following complex type, the locations this local variable has a value (default: no default)
+        {
+            startIndex: int, the index of the first opcode covered by this entry (default: no default)
+            length: int, how many indexes this entry covers (indexes, not opcodes) (default: no default)
+            index: the index of the local variable (default: no default)
+        }
     }
     {
-        targetType: "resourceVariable" string, a variable declared in a try-with-resources statement (try(@A AutoCloseable resource = arg){})
-        startIndex: int, the index of the first opcode where this local variable has a value (default: no default)
-        length: int, how many indexes this local variable is vlaid for (indexes, not opcodes) (default: no default)
-        index: the index of the local variable (default: no default)
+        type: "resourceVariable" string, a variable declared in a try-with-resources statement (try(@A AutoCloseable resource = arg){})
+        locations: array of the following complex type, the locations this local variable has a value (default: no default)
+        {
+            startIndex: int, the index of the first opcode covered by this entry (default: no default)
+            length: int, how many indexes this entry covers (indexes, not opcodes) (default: no default)
+            index: the index of the local variable (default: no default)
+        }
     }
     {
-        targetType: "exceptionParameter" string, a variable declared in a catch clause (try{arg.hashCode();}catch(@A Throwable e){e.hashCode();})
+        type: "exceptionParameter" string, a variable declared in a catch clause (try{arg.hashCode();}catch(@A Throwable e){e.hashCode();})
         exceptionIndex: int, an index into the exceptionHandlers of this method's code specifying which catch clause this belongs to (default: no default)
     }
     {
-        targetType: "instanceof", a type used as part of instanceof (if(arg instanceof @A Object){})
+        type: "instanceof", a type used as part of instanceof (if(arg instanceof @A Object){})
         index: int, index into code array specifying the instruction this is part of (default: no default)
     }
     {
-        targetType: "new" string, a type that new is called on (new @A Object();)
+        type: "new" string, a type that new is called on (new @A Object();)
         index: int, index into code array specifying the instruction this is part of (default: no default)
     }
     {
-        targetType: "dynamicNew" string, ::new as used as part of lambdas (java.util.function.Supplier<Object> local = @A Object::new)
+        type: "dynamicNew" string, ::new as used as part of lambdas (java.util.function.Supplier<Object> local = @A Object::new)
         index: int, index into code array specifying the instruction this is part of (default: no default)
     }
     {
-        targetType: "dynamicMethod" string, ::method as used as part of lambdas (java.util.function.Supplier<?> local = @A java.util.function.UnaryOperator::identity;)
+        type: "dynamicMethod" string, ::method as used as part of lambdas (java.util.function.Supplier<?> local = @A java.util.function.UnaryOperator::identity;)
         index: int, index into code array specifying the instruction this is part of (default: no default)
     }
     {
-        targetType: "cast" string, a type used in casting (arg = (@A Object) arg;)
+        type: "cast" string, a type used in casting (arg = (@A Object) arg;)
         index: int, index into code array specifying the instruction this is part of (default: no default)
         typeIndex: int, which type to target (in (Object & Cloneable), Object would be 0, Cloneable would be 1) (default: 0)
     }
     {
-        targetType: "newType" string, the type specifier for a constructor method call (new <@A Object> java.util.LinkedList<Object>(null);)
+        type: "newType" string, the type specifier for a constructor method call (new <@A Object> java.util.LinkedList<Object>(null);)
         index: int, index into code array specifying the instruction this is part of (default: no default)
         typeIndex: int, which type to target (in (Object & Cloneable), Object would be 0, Cloneable would be 1) (default: 0)
     }
     {
-        targetType: "methodType" string, the type specifier for a method call (java.util.Arrays.<@A Object> asList();)
+        type: "methodType" string, the type specifier for a method call (java.util.Arrays.<@A Object> asList();)
         index: int, index into code array specifying the instruction this is part of (default: no default)
         typeIndex: int, which type to target (in (Object & Cloneable), Object would be 0, Cloneable would be 1) (default: 0)
     }
     {
-        targetType: "dynamicNewType" string, the type specifier for a ::new (java.util.function.Supplier<Object> local = java.util.LinkedList<Object>::<@A Object> new;)
+        type: "dynamicNewType" string, the type specifier for a ::new (java.util.function.Supplier<Object> local = java.util.LinkedList<Object>::<@A Object> new;)
         index: int, index into code array specifying the instruction this is part of (default: no default)
         typeIndex: int, which type to target (in (Object & Cloneable), Object would be 0, Cloneable would be 1) (default: 0)
     }
     {
-        targetType: "dynamicMethodType" string, the type specifier for a ::method (java.util.function.Supplier<?> local = java.util.function.UnaryOperator::<@A Object>identity;)
+        type: "dynamicMethodType" string, the type specifier for a ::method (java.util.function.Supplier<?> local = java.util.function.UnaryOperator::<@A Object>identity;)
         index: int, index into code array specifying the instruction this is part of (default: no default)
         typeIndex: int, which type to target (in (Object & Cloneable), Object would be 0, Cloneable would be 1) (default: 0)
+    }
+    
+    // stackFrame object:
+    one of the following:
+    {
+        type: "same" string, a frame where none of the locals/stack have changed
+        offset: int < 0x10000, this frame's location - previous frame's location - 1
+    }
+    {
+        type: "setStack1" string, a frame where the locals haven't changed and the stack has one item
+        offset: int < 64, this frame's location - previous frame's location - 1
+        stack: verificationType object, the single item on the stack
+    }
+    {
+        type "growStack1" string or "extendStack1" string, a frame where the locals haven't changed and the stack has grown by one item
+        offset: int < 0x10000, this frame's location - previous frame's location - 1
+        stack: verificationType object, the item added to the stack
+    }
+    {
+        type: "reduceStack" string or "chop" string, a frame where the stack has reduced in size
+        offset: int < 0x10000, this frame's location - previous frame's location - 1
+        count: int >= 1 and <= 3, the number of stack items removed
+    }
+    {
+        type: "addLocals" string or "append" string, a frame where locals have been added
+        offset: int < 0x10000, this frame's location - previous frame's location - 1
+        locals: array of vertificationType objects, length must be >= 1 and <= 3, the locals added
+    }
+    {
+        type: "full" string, a frame that defines the entire stack and all of the locals
+        offset: int < 0x10000, this frame's location - previous frame's location - 1
+        locals: array of verificationType objects, the locals
+        stack: array of verificationType objects, the stack, ordered from bottom to top
     }
     
     // verificationType object:
@@ -290,6 +340,9 @@
     }
     "long" string
     "double" string
+    {
+        type: string, any of the above strings, works the same as specifying just the strings
+    }
     
     // arbitraryData object:
     one of
@@ -404,6 +457,12 @@
     var javaShortType = Java.type("short").class
     var javaBooleanType = Java.type("boolean").class
     var javaVoidType = Java.type("java.lang.Void").TYPE
+    var byteArray = Java.type("byte[]");
+    var NoSuchMethodException = Java.type("java.lang.NoSuchMethodException");
+    var javaEnum = Java.type("java.lang.Enum");
+    var javaArray = Java.type("java.lang.reflect.Array");
+    var Annotation = Java.type("java.lang.annotation.Annotation");
+    var javaString = Java.type("java.lang.String");
     
     var rootClassLoader = new (Java.extend(ClassLoader))({});
     var rootClassLoaderSuper = Java.super(rootClassLoader);
@@ -508,6 +567,13 @@
         "invokeInterface": 9,
     }
     
+    var typePathKindMapping = {
+        "array": 0,
+        "nested": 1,
+        "bound": 2,
+        "parameter": 3,
+    }
+    
     function toDescriptor(obj){
         var clazz = getClassObject(obj);
         if ( clazz !== null ) {
@@ -545,6 +611,10 @@
         } else {
             return "(" + toDescriptor(obj.parameters) + ")" + toDescriptor(obj.returnType);
         }
+    }
+    
+    function parseSignature(obj, indexes) {
+        // TODO implement
     }
     
     function isSet(name, obj) {
@@ -598,22 +668,29 @@
             return constants.utf8s[mappedName];
         }
         
+        function getConstantIndexClass(value) {
+            var mappedName = getClassName(value);
+            if ( ! (mappedName in constants.classes) ) {
+                var value = getConstantIndexUTF8(mappedName);
+                constantStream.writeByte(7);
+                constantStream.writeShort(value);
+                constants.classes[mappedName] = constantId++;
+            }
+            return constants.classes[mappedName];
+        }
+        
         function getConstantIndex(constant) {
             var mappingName;
             switch ( constant.type ) {
                 case "class":
-                    mappedName = getClassName(constant.value)
-                    if ( ! (mappedName in constants.classes) ) {
-                        var value = getConstantIndexUTF8(mappedName);
-                        constantStream.writeByte(7);
-                        constantStream.writeShort(value);
-                        constants.classes[mappedName] = constantId++;
-                    }
-                    return constants.classes[mappedName];
+                    return getConstantIndexClass(requireField("value", constant, "class constant"));
                 case "field":
-                    mappedName = [getClassName(constant.clazz), constant.name, toDescriptor(constant.type)].join(";");
+                    mappedName = [getClassName(requireField("clazz", constant, "field constant")),
+                                  requireField("name", constant, "field constant"),
+                                  toDescriptor(requireField("type", constant, "field constant")),
+                                 ].join(";");
                     if ( ! (mappedName in constants.fields) ) {
-                        var clazz = getConstantIndex({type:"class", name:constant.clazz});
+                        var clazz = getConstantIndexClass(constant.clazz);
                         var nameAndType = getConstantIndex({type:"nameAndType", name:constant.name, descriptor:constant.type});
                         constantStream.writeByte(9);
                         constantStream.writeShort(clazz);
@@ -623,9 +700,13 @@
                     return constants.fields[mappedName];
                 case "method":
                 case "interfaceMethod":
-                    mappedName = [getClassName(constant.clazz), constant.name, toDescriptor(constant.parameters), toDescriptor(constant.returnType)].join(";");
+                    mappedName = [getClassName(requireField("clazz", constant, constant.type + " constant")),
+                                  requireField("name", constant, constant.type + " constant"),
+                                  toDescriptor(requireField("parameters", constant, constant.type + " constant")),
+                                  toDescriptor(requireField("returnType", constant, constant.type + " constant")),
+                                 ].join(";");
                     if ( ! (mappedName in constants.methods) ) {
-                        var clazz = getConstantIndex({type:"class", name:constant.clazz});
+                        var clazz = getConstantIndexClass(constant.clazz);
                         var nameAndType = getConstantIndex({type:"nameAndType", name:constant.name, descriptor:{parameters:constant.parameters, returnType:constant.returnType}});
                         constantStream.writeByte(constant.type === "method" ? 10 : 11);
                         constantStream.writeShort(clazz);
@@ -634,7 +715,7 @@
                     }
                     return constants.methods[mappedName];
                 case "string":
-                    mappedName = "" + constant.value;
+                    mappedName = "" + requireField("value", constant, "string constant");
                     if ( ! (mappedName in constans.strings) ) {
                         var value = getConstantIndexUTF8(constant.value);
                         constantStream.writeByte(8);
@@ -644,7 +725,7 @@
                     return constants.strings[mappedName];
                 case "integer":
                 case "int":
-                    mappedName = constant.value;
+                    mappedName = requireField("value", constant, constant.type + " constant");
                     if ( ! (mappedName in constants.integers) ) {
                         constantStream.writeByte(3);
                         constantStream.writeInt(constant.value);
@@ -652,7 +733,7 @@
                     }
                     return constants.integers[mappedName];
                 case "float":
-                    mappedName = constant.value;
+                    mappedName = requireField("value", constant, "float constant");
                     if ( ! (mappedName in constants.floats) ) {
                         constantStream.writeByte(4);
                         constantStream.writeFloat(constant.value);
@@ -660,7 +741,7 @@
                     }
                     return constants.floats[mappedName];
                 case "long":
-                    mappedName = constant.value;
+                    mappedName = requireField("value", constant, "long constant");
                     if ( ! (mappedName in constants.longs) ) {
                         constantStream.writeByte(5);
                         constantStream.writeLong(constant.value);
@@ -668,7 +749,7 @@
                     }
                     return constants.longs[mappedName];
                 case "double":
-                    mappedName = constant.value;
+                    mappedName = requireField("value", constant, "double constant");
                     if ( ! (mappedName in constants.doubles) ) {
                         constantStream.writeByte(6);
                         constantStream.writeDouble(constant.value);
@@ -676,7 +757,9 @@
                     }
                     return constants.doubles[mappedName];
                 case "nameAndType":
-                    mappedName = [constant.name, toDescriptor(constant.descriptor)];
+                    mappedName = [requireField("name", constant, "nameAndType constant"), 
+                                  toDescriptor(requireField("descriptor", constant, "nameAndType constant")),
+                                 ].join(";");
                     if ( ! (mappedName in constants.nameAndTypes) ) {
                         var name = getConstantIndexUTF8(constant.name);
                         var descriptor = getConstantIndexUTF8(toDescriptor(constant.descriptor));
@@ -687,15 +770,31 @@
                     }
                     return constants.nameAndType[mappedName];
                 case "utf8":
-                    return getConstantIndexUTF8(constant.value);
+                    return getConstantIndexUTF8(requireField("value", constant, "utf8 constant");
                 case "methodHandle":
-                    var clazzObject = getClassObject(constant.clazz);
-                    var isInterface = (contant.kind === "invokeStatic" || constant.kind === "invokeSpecial") ? (clazzObject ? clazzObject.isInterface() : !!constant.isInterface) : constant.kind === "invokeInterface";
-                    mappedName = [constant.kind, isInterface, getClassName(constant.clazz), constant.name, toDescriptor(constant.fieldType),
-                                  toDescriptor(constant.parameters), toDescriptor(constant.returnType)].join(";");
+                    var clazzObject = getClassObject(requireField("clazz", constant, "methodHandle constant");
+                    var kind = requireField("kind", constant, "methodHandle constant");
+                    var isInterface =
+                        (kind === "invokeStatic" || kind === "invokeSpecial")
+                        ? (clazzObject ? clazzObject.isInterface() : !! requireField("isInterface", constant, "methodHandle constant")
+                        : kind === "invokeInterface";
+                    var descriptor =
+                        ({getField:true, getStatic:true, putField:true, putStatic:true})[kind];
+                        ? toDescriptor(requireField("fieldType", constant, "methodHandle constant"))
+                        : toDescriptor({
+                            parameters:requireField("parameters", constant, "methodHandle constant"),
+                            returnType:requireField("fieldType", constant, "methodHandle constant"),
+                        });
+                    mappedName = [kind,
+                                  isInterface,
+                                  getClassName(constant.clazz),
+                                  requireField("name", constant, "methodHandle constant"),
+                                  toDescriptor(getFieldWithDefault("fieldType", constant, "")),
+                                  descriptor,
+                                 ].join(";");
                     if ( ! (mappedName in constants.methodHandles) ) {
                         var ref;
-                        switch ( constant.kind ) {
+                        switch ( kind ) {
                             case "getField":
                             case "getStatic":
                             case "putField":
@@ -709,16 +808,18 @@
                                 ref = getConstantIndex({type:(isInterface?"interfaceMethod":"method"), clazz:constant.clazz, name:constant.name, parameters:constant.parameters, returnType:constant.returnType});
                                 break;
                             default:
-                                throw "unknown methodHandle kind [" + constant.kind + "]";
+                                throw "unknown methodHandle kind [" + kind + "]";
                         }
                         constantStream.writeByte(15);
-                        constantStream.writeByte(methodHandleKindMapping[constant.kind]);
+                        constantStream.writeByte(methodHandleKindMapping[kind]);
                         constantStream.writeShort(ref);
                         constants.methodHandles[mappedName] = constantId++;
                     }
                     return constants.methodHandles[mappedName];
                 case "methodType":
-                    mappedName = [toDescriptor(constant.parameters), toDescriptor(constant.returnType)].join(";");
+                    mappedName = [toDescriptor(requireField("parameters", constant, "methodType constant"),
+                                  toDescriptor(requireField("parameters", constant, "returnType constant"))
+                                 ].join(";");
                     if ( ! (mappedName in constants.methodTypes) ) {
                         var descriptor = getConstantIndexUTF8(toDescriptor({parameters:constant.parameters, returnType:constant.returnType}));
                         constantStream.writeByte(16);
@@ -727,7 +828,11 @@
                     }
                     return constants.methodTypes[mappedName];
                 case "invokeDynamic":
-                    mappedName = [constant.bootstrapIndex, constant.name, toDescriptor(constant.parameters), toDescriptor(constant.returnType)];
+                    mappedName = [requireField("bootstrapIndex", constant, "invokeDynamic constant"),
+                                  requireField("name", constant, "invokeDynamic constant"),
+                                  toDescriptor(requireField("parameters", constant, "invokeDynamic constant")),
+                                  toDescriptor(requireField("returnType", constant, "invokeDynamic constant"))
+                                 ].join(";");
                     if ( ! (mappedName in constants.invokeDynamics) ) {
                         var nameAndType = getConstantIndex({type:"nameAndType", name:constant.name, descriptor:{parameters:constant.parameters, returnType:constant.returnType}});
                         constantStream.writeByte(18);
@@ -748,10 +853,333 @@
         var postConstantStream = new DataOutputStream(constantData);
         
         function writeCustomData(stream, obj) {
-            // TODO implement
+            var constants = getFieldWithDefault("constants", obj, []);
+            constants.sort(function(x,y){return x.address - y.address});
+            if ( isSet("array", obj) ) {
+                stream.writeInt(obj.array.length);
+                var startIndex = 0;
+                for each ( var constant in constants ) {
+                    stream.write(obj.array, startIndex, requireField("address", constant, "arbitraryData constant") - startIndex);
+                    stream.writeShort(getConstantIndex(requireField("constant", constant, "arbitraryData constant"));
+                    startIndex = constant.address + 2;
+                }
+                stream.write(obj.array, startIndex, obj.array.length - startIndex);
+            } else if ( isSet("stream", obj) && isSet("size", obj) ) {
+                stream.writeInt(obj.size);
+                var buf = new byteArray(1024);
+                var startIndex = 0;
+                for each ( var constant in constants ) {
+                    while ( startIndex < constant.address ) {
+                        var countRead = obj.stream.read(buf, 0, Math.min(1024, crequireField("address", constant, "arbitraryData constant") - startIndex));
+                        if ( countRead === -1 ) {
+                            throw "unexpected end of stream in arbitraryData stream";
+                        }
+                        stream.write(buf, 0, countRead);
+                        startIndex += countRead;
+                    }
+                    stream.writeShort(getConstatnIndex(requireField("constant", constant, "arbitraryData constant"));
+                    obj.stream.skip(2);
+                }
+                while ( startIndex < obj.size ) {
+                    var countRead = obj.stream.read(buf, 0, Math.min(1024, obj.size - startIndex));
+                    if ( countRead === -1 ) {
+                        throw "unexpected end of stream in arbitraryData stream";
+                    }
+                    stream.write(buf, 0, countRead);
+                    startIndex += countRead;
+                }
+            } else {
+                throw "missing item in arbitraryData object";
+            }
         }
         
-        function doWriteAttributes(stream, obj) {
+        function detectAnnotationType(value, clazz) {
+            if ( value instanceof Object && isSet("typeOverride", value ) && (isSet("value", value) || value.value === null) ) {
+                return value.typeOverride;
+            }
+            if ( clazz ) {
+                try{
+                    return clazz.getDelcaredMethod(name).getReturnType();
+                } catch (e if e instanceof NoSuchMethodException) {
+                    // do nothing, fall through to guessing type
+                }
+            }
+            if ( typeof value === "string" && value.length > 1 ) {
+                return javaString.class;
+            } else if ( value instanceof javaEnum ) {
+                return value.getClass();
+            } else if ( value instanceof javaClass ) {
+                return javaClass.class;
+            } else if ( value === null ) {
+                return javaClass.class;
+            } else if ( value.getClass && value.getClass().isAnnotation() ) {
+                return value.getClass();
+            } else if ( value instanceof Array ) {
+                var subType = detectAnnotationType(value[0]);
+                if ( subType !== undefined ) {
+                    return javaArray.newInstance(subType, 0).getClass();
+                } else {
+                    return undefined;
+                }
+            } else if ( value instanceof Object && isSet("type", value) ) {
+                return Annotation.class;
+            } else {
+                throw "could not detect annotation type for [" + name + "] on [" + obj.type + "]";
+            }
+            
+        }
+        
+        function writeAnnotationValue(stream, value, type) {
+            if ( value instanceof Object && isSet("typeOverride", value ) && isSet("value", value) ) {
+                type = value.typeOverride;
+                value = value.value;
+            }
+            switch ( type ) {
+                case javaByteType:
+                    stream.writeChar("B");
+                    stream.writeShort(getConstantIndex({type:"integer", value:value}));
+                    break;
+                case javaCharType:
+                    stream.writeChar("C");
+                    stream.writeShort(getConstantIndex({type:"integer", value:value}));
+                    break;
+                case javaDoubleType:
+                    stream.writeChar("D");
+                    stream.writeShort(getConstantIndex({type:"double", value:value}));
+                    break;
+                case javaFloatType:
+                    stream.writeChar("F");
+                    stream.writeShort(getConstantIndex({type:"float", value:value}));
+                    break;
+                case javaIntType:
+                    stream.writeChar("I");
+                    stream.writeShort(getConstantIndex({type:"integer", value:value}));
+                    break;
+                case javaLongType:
+                    stream.writeChar("J");
+                    stream.writeShort(getConstantIndex({type:"long", value:value}));
+                    break;
+                case javaShortType:
+                    stream.writeChar("S");
+                    stream.writeShort(getConstantIndex({type:"integer", value:value}));
+                    break;
+                case javaBooleanType:
+                    stream.writeChar("Z");
+                    stream.writeShort(getConstantIndex({type:"integer", value:value}));
+                    break;
+                case javaString.class:
+                    stream.writeChar("s");
+                    stream.writeShort(getConstantIndex({type:"utf8", value:value}));
+                    break;
+                case javaClass:
+                    stream.writeChar("c");
+                    stream.writeShort(getConstantIndexUTF8(toDescriptor(value)));
+                default:
+                    if ( retType.isEnum() ) {
+                        stream.writeChar("e");
+                        stream.writeShort(getConstantIndexUTF8(getClassName(retType)));
+                        stream.writeShort(getConstantIndexUTF8(value.name()));
+                    } else if ( retType.isAnnotation() ) {
+                        stream.writeChar("@");
+                        writeAnnotation(stream, value);
+                    } else if ( retType.isArray() ) {
+                        stream.writeChar("[");
+                        stream.writeShort(value.length);
+                        for each ( var annotationValue in value ) {
+                            writeAnnotationValue(stream, value);
+                            writeAnnotationValue(stream, annotationValue, type.getComponentType());
+                        }
+                    } else {
+                        throw "invlaid annotation type [" + retType + "]";
+                    }
+                    break;
+            }
+        }
+        
+        function writeAnnotation(stream, obj) {
+            stream.writeShort(getConstantIndex({type:"utf8", value:getClassName(requireField("type", obj, "annotation"))}));
+            var clazz = getClassObject(obj.type);
+            if ( ! isSet("values", obj ) ) {
+                stream.writeShort(0);
+            } else {
+                stream.writeShort(Object.keys(obj.values).length);
+                for ( var name in obj.values ) {
+                    stream.writeUTF8(name);
+                    writeAnnotationValue(stream, obj.values[name], detectAnnotationType(obj.values[name], clazz));
+                }
+            }
+        }
+        
+        function writeTypeAnnotation(stream, obj) {
+            var type = requireField("type", requireField("target", obj, "type annoation"), "type annotation target");
+            switch ( type ) {
+                case "class":
+                    stream.writeByte(0x00);
+                    stream.writeByte(getFieldWithDefault("genericIndex", obj, 0));
+                    break;
+                case "method":
+                    stream.writeByte(0x01);
+                    stream.writeByte(getFieldWithDefault("genericIndex", obj, 0));
+                    break;
+                case "super":
+                    stream.writeByte(0x10);
+                    if ( getFieldWithDefault("interfaceIndex", obj, -1) === -1 ) {
+                        stream.writeShort(65535);
+                    } else {
+                        stream.writeShort(obj.interfaceIndex);
+                    }
+                    break;
+                case "classBound":
+                    stream.writeByte(0x11);
+                    stream.writeByte(getFieldWithDefault("genericIndex", obj, 0));
+                    stream.writeByte(getFieldWithDefault("boundIndex", obj, 0));
+                    break;
+                case "methodBound":
+                    stream.writeByte(0x12);
+                    stream.writeByte(getFieldWithDefault("genericIndex", obj, 0));
+                    stream.writeByte(getFieldWithDefault("boundIndex", obj, 0));
+                    break;
+                case "field":
+                    stream.writeByte(0x13);
+                    break;
+                case "methodReturn":
+                    stream.writeByte(0x14);
+                    break;
+                case "methodThis":
+                    stream.writeByte(0x15);
+                    break;
+                case "methodParameter":
+                    stream.writeByte(0x16);
+                    stream.writeByte(getFieldWithDefault("parameterIndex", obj, 0));
+                    break;
+                case "methodThrows":
+                    stream.writeByte(0x17);
+                    stream.writeShort(getFieldWithDefault("exceptionIndex", obj, 0));
+                    break;
+                case "localVariable":
+                    stream.writeByte(0x40);
+                    for each ( var location of requireField("locations", obj, "type annotation target " + type) ) {
+                        stream.writeShort(requireField("startIndex", obj, "type annotation target " + type + " location"));
+                        stream.writeShort(requireField("length", obj, "type annotation target " + type + " location"));
+                        stream.writeShort(requireField("index", obj, "type annotation target " + type + " location"));
+                    }
+                    break;
+                case "resourceVariable":
+                    stream.writeByte(0x41);
+                    for each ( var location of requireField("locations", obj, "type annotation target " + type) ) {
+                        stream.writeShort(requireField("startIndex", obj, "type annotation target " + type + " location"));
+                        stream.writeShort(requireField("length", obj, "type annotation target " + type + " location"));
+                        stream.writeShort(requireField("index", obj, "type annotation target " + type + " location"));
+                    }
+                    break;
+                case "exceptionParameter":
+                    stream.writeByte(0x42);
+                    stream.writeShort(requireField("exceptionIndex", obj, "type annotation target " + type));
+                    break;
+                case "instanceof":
+                    stream.writeByte(0x43);
+                    stream.writeShort(requireField("index", obj, "type annotation target " + type));
+                    break;
+                case "new":
+                    stream.writeByte(0x44);
+                    stream.writeShort(requireField("index", obj, "type annotation target " + type));
+                    break;
+                case "dynamicNew":
+                    stream.writeByte(0x45);
+                    stream.writeShort(requireField("index", obj, "type annotation target " + type));
+                    break;
+                case "dynamicMethod":
+                    stream.writeByte(0x46);
+                    stream.writeShort(requireField("index", obj, "type annotation target " + type));
+                    break;
+                case "cast":
+                    stream.writeByte(0x47);
+                    stream.writeShort(requireField("index", obj, "type annotation target " + type));
+                    stream.writeByte(getFieldWithDefault("typeIndex", obj, 0));
+                    break;
+                case "newType":
+                    stream.writeByte(0x48);
+                    stream.writeShort(requireField("index", obj, "type annotation target " + type));
+                    stream.writeByte(getFieldWithDefault("typeIndex", obj, 0));
+                    break;
+                case "methodType":
+                    stream.writeByte(0x49);
+                    stream.writeShort(requireField("index", obj, "type annotation target " + type));
+                    stream.writeByte(getFieldWithDefault("typeIndex", obj, 0));
+                    break;
+                case "dynamicNewType":
+                    stream.writeByte(0x4A);
+                    stream.writeShort(requireField("index", obj, "type annotation target " + type));
+                    stream.writeByte(getFieldWithDefault("typeIndex", obj, 0));
+                    break;
+                case "dynamicMethodType":
+                    stream.writeByte(0x4B);
+                    stream.writeShort(requireField("index", obj, "type annotation target " + type));
+                    stream.writeByte(getFieldWithDefault("typeIndex", obj, 0));
+                    break;
+            }
+            if ( ! isSet("targetPath", obj) ) {
+                stream.writeShort(0);
+            } else {
+                stream.writeShort(obj.targetPath.length);
+                for each ( var pathElement in obj.targetPath ) {
+                    var type;
+                    var index;
+                    if ( typeof pathElement === "string" ) {
+                        type = pathElement;
+                        index = 0;
+                    } else {
+                        type = requireField("kind", pathElement, "type annotation pathElement");
+                        index = getFieldWithDefault("index", pathElement, 0);
+                    }
+                    stream.writeByte(typePathKindMapping[type]);
+                    stream.writeByte(index);
+                }
+            }
+            writeAnnotation(stream, requireField("annotation", obj, "type annotation"));
+        }
+        
+        function writeVerificationType(stream, obj) {
+            var type = obj;
+            if ( obj instanceof Object ) {
+                type = requireField("type", obj, "verificationType");
+            }
+            switch ( type ) {
+                case "top":
+                    stream.writeByte(0);
+                    break;
+                case "int":
+                    stream.writeByte(1);
+                    break;
+                case "float":
+                    stream.writeBye(2);
+                    break;
+                case "null":
+                    stream.writeByte(5);
+                    break;
+                case "uninitializedThis":
+                    stream.writeByte(6);
+                    break;
+                case "object":
+                    stream.writeByte(7);
+                    stream.writeShort(getConstantIndexClass(requireField("value", obj, "verificationType object")));
+                    break;
+                case "uninitialized":
+                    stream.writeByte(8);
+                    stream.writeShortrequireField("newOffset", obj, "verificationType uninitialized"));
+                    break;
+                case "long":
+                    stream.writeByte(4);
+                    break;
+                case "double":
+                    stream.writeByte(3);
+                    break;
+                default:
+                    throw "unknown verification type [" + type + "]";
+            }
+        }
+                    
+        function writeAttributes(stream, obj) {
             var supportedAttributes = {
                 constantValue: true, synthetic: true, deprecated: true, signature: true, runtimeAnnotation: true, compiletimeAnnotations: true, runtimeTypeAnnotations: true,
                 compiletimeTypeAnnotations: true, code: true, lineNumbers: true, localVariables: true, stackMap:true, exceptions: true, runtimeParameterAnnotations: true,
@@ -791,11 +1219,11 @@
                         case javaBooleanType:
                             ref = getConstantIndex({type:"integer", value:obj.attributes.constantValue});
                             break;
-                        case javaString:
+                        case javaString.class:
                             ref = getConstantIndex({type:"string", value:obj.attributes.constantValue});
                             break;
                         default:
-                            throw "invalid constanValue type [" + obj.type + "]";
+                            throw "unknown constantValue type [" + obj.type + "]";
                     }
                     stream.writeShort(ref);
                 }
@@ -814,10 +1242,10 @@
                             attributeStream.writeShort(requireField("startIndex", exceptionHandler, "exceptionHandler attribute"));
                             attributeStream.writeShort(requireField("endIndex", exceptionHandler, "exceptionHandler attribute"));
                             attributeStream.writeShort(requireField("handlerIndex", exceptionHandler, "exceptionHandler attribute"));
-                            attributeStream.writeShort(isSet("catchType", exceptionHandler) ? getConstantIndex({type:"class", value:exceptionHandler.catchType}) : 0);
+                            attributeStream.writeShort(isSet("catchType", exceptionHandler) ? getConstantIndexClass(exceptionHandler.catchType) : 0);
                         }
                     }
-                    doWriteAttributes(attributeStream, obj.attributes.code);
+                    writeAttributes(attributeStream, obj.attributes.code);
                     
                     stream.writeShort(getConstantIndexUTF8("Code"));
                     stream.writeInt(attributeData.size());
@@ -829,7 +1257,53 @@
                     attributeStream = new DataOutputStream(attributeData);
                     
                     attributeStream.writeShort(obj.attributes.stackMap.length);
-                    // TODO implement
+                    for each ( var stackFrame in obj.attributes.stackMap ) {
+                        switch ( requireField("type", stackFrame, "stackMap attribute") ) {
+                            case "same":
+                                if ( requireField("offset", stackFrame, "stackFrame " + stackFrame.type) < 64 ) {
+                                    attributeStream.writeByte(stackFrame.offset);
+                                } else {
+                                    attributeStream.writeByte(251);
+                                    attributeStream.writeShort(stackFrame.offset);
+                                }
+                                break;
+                            case "setStack1":
+                            case "growStack1":
+                                attributeStream.writeByte(64 + requireField("offset", stackFrame, "stackFrame " + stackFrame.type));
+                                writeVerificationType(attributeStream, requireField("stack", stackFrame, "stackFrame " + stackFrame.type)
+                                break;
+                            case "extendStack1":
+                                attributeStream.writeByte(247);
+                                attributeStream.writeShort(requireField("offset", stackFrame, "stackFrame " + stackFrame.type));
+                                writeVerificationType(attributeStream, requireField("stack", stackFrame, "stackFrame " + stackFrame.type)
+                                break;
+                            case "reduceStack":
+                            case "chop":
+                                attributeStream.writeByte(251 - requireField("offset", stackFrame, "stackFrame " + stackFrame.type));
+                                attributeStream.writeShort(requireField("offset", stackFrame, "stackFrame " + stackFrame.type));
+                                break;
+                            case "addLocals":
+                            case "append":
+                                attributeStream.writeByte(251 + requireField("locals", stackFrame, "stackFrame " + stackFrame.type).length);
+                                attributeStream.writeShort(requireField("offset", stackFrame, "stackFrame " + stackFrame.type));
+                                for each ( var verType in requireField("locals", stackFrame, "stackFrame " + stackFrame.type) ) {
+                                    writeVerificationType(attributeStream, verType);
+                                }
+                            case "full":
+                                attributeStream.writeByte(255);
+                                attributeStream.writeShort(requireField("offset", stackFrame, "stackFrame " + stackFrame.type));
+                                attributeStream.writeShort(requireField("locals", stackFrame, "stackFrame " + stackFrame.type).length);
+                                for each ( var verType in requireField("locals", stackFrame, "stackFrame " + stackFrame.type) ) {
+                                    writeVerificationType(attributeStream, verType);
+                                }
+                                attributeStream.writeShort(requireField("stack", stackFrame, "stackFrame " + stackFrame.type).length);
+                                for each ( var verType in requireField("stack", stackFrame, "stackFrame " + stackFrame.type) ) {
+                                    writeVerificationType(attributeStream, verType);
+                                }
+                            default:
+                                throw "unknown stackFrame type [" + stackFrame.type + "]";
+                        }
+                    }
                     
                     stream.writeShort(getConstantIndexUTF8("StackMapTable"));
                     stream.writeInt(attributeData.size());
@@ -840,15 +1314,15 @@
                     stream.writeShort(getConstantIndexUTF8("Exceptions"));
                     stream.writeInt(2 + 2 * obj.attributes.exceptions.length);
                     for each ( var clazz in obj.attributes.exceptions ) {
-                        stream.writeShort(getConstantIndex({type:"class", value:clazz}));
+                        stream.writeShort(getConstantIndexClass(clazz));
                     }
                 }
                 if ( isSet("innerClasses", obj.attributes) ) {
                     stream.writeShort(getConstantIndexUTF8("InnerClasses"));
                     stream.writeInt(2 + 8 * obj.attributes.innerClasses.length)
                     for each ( var innerClass in obj.attributes.innerClasses ) {
-                        stream.writeShort(getConstantIndex({type:"class", value:requiredField("innerClass", innerClass, "innerClass attribute")}));
-                        stream.writeShort(isSet("outerClass", innerClass) ? getConstantIndex({type:"class", value:innerClass.outerClass}) : 0);
+                        stream.writeShort(getConstantIndexClass(requiredField("innerClass", innerClass, "innerClass attribute")));
+                        stream.writeShort(isSet("outerClass", innerClass) ? getConstantIndexClass(innerClass.outerClass) : 0);
                         stream.writeShort(isSet("name", innerClass) ? getConstantIndexUTF8(clazz) : 0);
                         stream.writeShort(requireField("accessFlags", innerClass, "innerClass attribute");
                     }
@@ -856,7 +1330,7 @@
                 if ( isSet("enclosingMethod", obj.attributes) ) {
                     stream.writeShort(getConstantIndexUTF8("EnclosingMethod"));
                     stream.writeInt(4);
-                    stream.writeShort(getConstantIndex({type:"class", value:requireField("clazz", obj.attribtues.enclosingMethod, "enclosingMethod attribute")}));
+                    stream.writeShort(getConstantIndex(getConstantIndexClass(requireField("clazz", obj.attribtues.enclosingMethod, "enclosingMethod attribute"))));
                     // TODO figure out method is represented
                 }
                 if ( getFieldWithDefault("synthetic", obj.attributes, false) ) {
@@ -892,17 +1366,17 @@
                         stream.writeShort(requireField("startIndex", localVariable, "localVariable attribute"));
                         stream.writeShort(requireField("length", localVariable, "localVariable attribute"));
                         stream.writeShort(getConstantIndexUTF8(requireField("name", localVariable, "localVariable attribute")));
-                        // TODO parse signature
+                        // TODO parse signature for descriptor
                         stream.writeShort(requireField("index", localVariable, "localVariable attribute"));
                     }
                     
-                    stream.writeShort(getConstantIndexUTF8("LocalVariableTable"));
+                    stream.writeShort(getConstantIndexUTF8("LocalVariableTypeTable"));
                     stream.writeInt(2 + 10 * obj.attributes.localVariables.length);
                     for each ( var localVariable in obj.attributes.localVariables ) {
                         stream.writeShort(requireField("startIndex", localVariable, "localVariable attribute"));
                         stream.writeShort(requireField("length", localVariable, "localVariable attribute"));
                         stream.writeShort(getConstantIndexUTF8(requireField("name", localVariable, "localVariable attribute")));
-                        // TODO parse signature
+                        // TODO parse signature for signature
                         stream.writeShort(requireField("index", localVariable, "localVariable attribute"));
                     }
                 }
@@ -911,36 +1385,137 @@
                     stream.writeInt(0);
                 }
                 if ( isSet("runtimeAnnotations", obj.attributes) ) {
+                    attributeData = new ByteArrayOutputStream();
+                    attributeStream = new DataOutputStream(attributeData);
+                    
+                    attributeStream.writeShort(obj.attributes.runtimeAnnotations.length);
+                    for each ( var annotation in obj.attributes.runtimeAnnotations ) {
+                        writeAnnotation(attributeStream, annotation);
+                    }
+                    
                     stream.writeShort(getConstantIndexUTF8("RuntimeVisibleAnnotations"));
-                    // TODO implement
+                    stream.writeInt(attributeData.size());
+                    attributeData.writeTo(stream);
+                    attributeStream.close();
                 }
                 if ( isSet("compiletimeAnnotations", obj.attributes) ) {
+                    attributeData = new ByteArrayOutputStream();
+                    attributeStream = new DataOutputStream(attributeData);
+                    
+                    attributeStream.writeShort(obj.attributes.compiletimeAnnotations.length);
+                    for each ( var annotation in obj.attributes.compiletimeAnnotations ) {
+                        writeAnnotation(attributeStream, annotation);
+                    }
+                    
                     stream.writeShort(getConstantIndexUTF8("RuntimeInvisibleAnnotations"));
-                    // TODO implement
+                    stream.writeInt(attributeData.size());
+                    attributeData.writeTo(stream);
+                    attributeStream.close();
                 }
                 if ( isSet("runtimeParameterAnnotations", obj.attributes) ) {
+                    attributeData = new ByteArrayOutputStream();
+                    attributeStream = new DataOutputStream(attributeData);
+                    
+                    attributeStream.writeShort(obj.attributes.runtimeParameterAnnotations.length);
+                    for each ( var annotationArray in obj.attributes.runtimeParameterAnnotations ) {
+                        attributeStream.writeShort(annotationArray.length);
+                        for each ( var annotation in annotationArray ) {
+                            writeAnnotation(attributeStream, annotation);
+                        }
+                    }
+                    
                     stream.writeShort(getConstantIndexUTF8("RuntimeVisibleParameterAnnotations"));
-                    // TODO implement
+                    stream.writeInt(attributeData.size());
+                    attributeData.writeTo(stream);
+                    attributeStream.close();
                 }
                 if ( isSet("compiletimeParameterAnnotations", obj.attributes) ) {
+                    attributeData = new ByteArrayOutputStream();
+                    attributeStream = new DataOutputStream(attributeData);
+                    
+                    attributeStream.writeShort(obj.attributes.compiletimeParameterAnnotations.length);
+                    for each ( var annotationArray in obj.attributes.compiletimeParameterAnnotations ) {
+                        attributeStream.writeShort(annotationArray.length);
+                        for each ( var annotation in annotationArray ) {
+                            writeAnnotation(attributeStream, annotation);
+                        }
+                    }
+                    
                     stream.writeShort(getConstantIndexUTF8("RuntimeInvisibleParameterAnnotations"));
-                    // TODO implement
+                    stream.writeInt(attributeData.size());
+                    attributeData.writeTo(stream);
+                    attributeStream.close();
                 }
                 if ( isSet("runtimeTypeAnnotations", obj.attributes) ) {
+                    attributeData = new ByteArrayOutputStream();
+                    attributeStream = new DataOutputStream(attributeData);
+                    
+                    attributeStream.writeShort(obj.attributes.runtimeTypeAnnotations.length);
+                    for each ( var annotation in obj.attributes.runtimeTypeAnnotations ) {
+                        writeTypeAnnotation(attributeStream, annotation);
+                    }
+                    
                     stream.writeShort(getConstantIndexUTF8("RuntimeVisibleTypeAnnotations"));
-                    // TODO implement
+                    stream.writeInt(attributeData.size());
+                    attributeData.writeTo(stream);
+                    attributeStream.close();
                 }
                 if ( isSet("compiletimeTypeAnnotations", obj.attributes) ) {
+                    attributeData = new ByteArrayOutputStream();
+                    attributeStream = new DataOutputStream(attributeData);
+                    
+                    attributeStream.writeShort(obj.attributes.compiletimeTypeAnnotations.length);
+                    for each ( var annotation in obj.attributes.compiletimeTypeAnnotations ) {
+                        writeTypeAnnotation(attributeStream, annotation);
+                    }
+                    
                     stream.writeShort(getConstantIndexUTF8("RuntimeInvisibleTypeAnnotations"));
-                    // TODO implement
+                    stream.writeInt(attributeData.size());
+                    attributeData.writeTo(stream);
+                    attributeStream.close();
                 }
                 if ( isSet("annotationDefault", obj.attributes) ) {
+                    attributeData = new ByteArrayOutputStream();
+                    attributeStream = new DataOutputStream(attributeData);
+                    
+                    writeAnnotationValue(attributeStream, obj.attributes.annotationDefault,
+                                         detectAnnotationType(obj.attributes.annotationDefault, getClassObject(obj.returnType)));
+                    
                     stream.writeShort(getConstantIndexUTF8("AnnotationDefault"));
-                    // TODO implement
+                    stream.writeInt(attributeData.size());
+                    attributeData.writeTo(stream);
+                    attributeStream.close();
                 }
                 if ( isSet("bootstrapMethods", obj.attributes) ) {
+                    attributeData = new ByteArrayOutputStream();
+                    attributeStream = new DataOutputStream(attributeData);
+                    
+                    attributeStream.writeShort(obj.attributes.bootstrapMethods.length);
+                    for each ( var bootstrapMethod in bootstrapMethods ) {
+                        try {
+                            attributeStream.writeShort(getConstantIndex({
+                                type: "methodHandle",
+                                kind: bootstrapMethod.kind,
+                                isInterface: bootstrapMethod.isInterface,
+                                clazz: bootstrapMethod.clazz,
+                                name: bootstrapMethod.name,
+                                parameters: bootstrapMethod.parameters,
+                                returnType: bootstrapMethod.returnType,
+                            }));
+                        } catch (e if typeof e === "string") {
+                            // we're passing off argument requirements to getConstantIndex, so add our location to any returned exceptions
+                            throw e + "in bootstrapMethods attribute";
+                        }
+                        attributeStream.writeShort(bootstrapMethod.bootstrapArguments.length);
+                        for each ( var bootstrapArgument in bootstrapMethod.bootstrapArguments ) {
+                            attributeStream.writeShort(getConstantIndex(bootstrapArgument));
+                        }
+                    }
+                    
                     stream.writeShort(getConstantIndexUTF8("BootstrapMethods"));
-                    // TODO implement
+                    stream.writeInt(attributeData.size());
+                    attributeData.writeTo(stream);
+                    attributeStream.close();
                 }
                 if ( isSet("methodParameters", obj.attributes) ) {
                     stream.writeShort(getConstantIndexUTF8("MethodParameters"));
@@ -955,18 +1530,17 @@
                 stream.writeShort(getConstantIndexUTF8(requireField("name", customAttribute, "custom attribute"));
                 writeCustomData(requireField("data", customAttribute, "custom attribute"));
             }
-            // TODO implement
         }
         
         postConstantStream.writeShort(getFieldWithDefault("accessFlags", description, 0x0021));
-        postConstantStream.writeShort(getConstantIndex({type:"class", value:(isSet("value", description) ? description.value : "createPackage.CreatedClass" + Math.random().toString().substring(2))}));
-        postConstantStream.writeShort(getConstantIndex({type:"class", value:getFieldWithDefault("superClass", description, javaObject)}));
+        postConstantStream.writeShort(getConstantIndexClass(isSet("value", description) ? description.value : "createPackage.CreatedClass" + Math.random().toString().substring(2)));
+        postConstantStream.writeShort(getConstantIndexClass(getFieldWithDefault("superClass", description, javaObject)));
         if ( ! isSet("interfaces", description) {
             postConstantStream.writeShort(0);
         } else {
             postConstantStream.writeShort(description.interfaces.length);
             for each ( var iface in description.interfaces.length ) {
-                postConstantStream.writeShort(getConstantIndex({type:"class", value:iface}));
+                postConstantStream.writeShort(getConstantIndexClass(iface));
             }
         }
         if ( ! isSet("fields", description) ) {
@@ -977,7 +1551,7 @@
                 postConstantStream.writeShort(getFieldWithDefault("accessFlags", fields, 0x0001));
                 postConstantStream.writeShrot(getConstantIndexUTF8(requireField("name", field, "field")));
                 postConstantStream.writeShort(getConstantIndexUTF8(toDescriptor(field.type)));
-                doWriteAttributes(postConstantStream, field);
+                writeAttributes(postConstantStream, field);
             }
         }
         if ( ! isSet("methods", description) ) {
@@ -987,14 +1561,14 @@
             for each ( var method in description.methods ) {
                 postConstantStream.writeShort(getFieldWithDefault("accessFlags", method, 0x0001));
                 postConstantStream.writeShort(getConstantIndexUTF8(requireField("name", method, "method")));
-                postConstantStream.writeShort(getConstantIndex({type:"utf8", value:toDescriptor({
+                postConstantStream.writeShort(getConstantIndexUTF8(toDescriptor({
                     parameters: getFieldWithDefault("parameters", method, []),
                     returnType: getFieldWithDefault("returnType", method, null),
-                })})));
-                doWriteAttributes(postConstantStrema, method);
+                })));
+                writeAttributes(postConstantStrema, method);
             }
         }
-        doWriteAttributes(postConstantStream, description);
+        writeAttributes(postConstantStream, description);
         
         
         
