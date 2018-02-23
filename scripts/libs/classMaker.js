@@ -1529,11 +1529,13 @@
                         stream.writeShort(getConstantIndexUTF8("LocalVariableTypeTable"));
                         stream.writeInt(2 + 10 * numLocalTypes);
                         for each ( var localVariable in obj.attributes.localVariables ) {
-                            stream.writeShort(requireField("startIndex", localVariable, "localVariable attribute"));
-                            stream.writeShort(requireField("length", localVariable, "localVariable attribute"));
-                            stream.writeShort(getConstantIndexUTF8(requireField("name", localVariable, "localVariable attribute")));
-                            stream.writeShort(getConstantIndexUTF8(parseSignature(requireField("signature", localVariable, "localVariable attribute"))));
-                            stream.writeShort(requireField("index", localVariable, "localVariable attribute"));
+                            if ( getClassName(localVariable) !== null ) {
+                                stream.writeShort(requireField("startIndex", localVariable, "localVariable attribute"));
+                                stream.writeShort(requireField("length", localVariable, "localVariable attribute"));
+                                stream.writeShort(getConstantIndexUTF8(requireField("name", localVariable, "localVariable attribute")));
+                                stream.writeShort(getConstantIndexUTF8(parseSignature(requireField("signature", localVariable, "localVariable attribute"))));
+                                stream.writeShort(requireField("index", localVariable, "localVariable attribute"));
+                            }
                         }
                     }
                 }
