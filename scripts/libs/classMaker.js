@@ -38,7 +38,7 @@
         {
             accessFlags: int, the int value of the access flags for this method (look in java.lang.reflect.Modifier and the JVM specifiaction) (default: PUBLIC)
             name: string, method name (default: no default)
-            parameters: array of class objects, the arguments to this function (if vararg, the last argument should be an array type) (default: empty array)
+            parameters: array of class objects, the arguments to this method (if vararg, the last argument should be an array type) (default: empty array)
             returnType: class object, the return type of this method (default: null, void return type)
             attributes: following complex object of attributes for this method, look at the Java Virtual Machine Specification (default: object with specified default values)
             {
@@ -63,7 +63,9 @@
                             startIndex: int, the index of the first opcode referenced by this entry (default: no default)
                             length: int, how many indexes this entry is valid for (indexes, not opcodes) (default: no default)
                             name: string, the name of this local variable (default: no default)
-                            signature: signature complex object (see bellow), this specifies the type of this local, including generic parts (default: no default)
+                            signature: signature complex object (see bellow), this specifies the type of this local, including generic parts (class objects will prevent
+                                the associated entry from being included in LocalVariableTypeTable, nothing but class objects will prevent the LocalVariableTypeTable attribute
+                                from being included)(default: no default)
                             index: the index of the local variable (default: no default)
                         }
                         stackMap: array of stackFrame objects, specifies the types of local variables and objects on the stack at various points in the code,
@@ -84,10 +86,13 @@
                 deprecated: boolean, marks this method as deprecated (default: false, attribute won't be included)
                 signature: following complex object, this specifies the generic parts of this method (default: not set, attribute won't be included)
                 {
-                    indexes: map from strings to arrays of signature objects.  in an array, they're can only be one non-interface.  (this is used for generic classes (<K> would be {K:java.lang.Object}) (default: not set)
-                    parameters: array of signature objects, the signatures of the arguments (default: array of class objects of the arguments)
+                    types: map from strings to arrays of signature objects.  the 0th array index must be a non-interface or null.
+                        the array is the types the generic type extends (<K extends Object & Cloneable> would have Object as the 0th index and Cloneable as the 1st) (default: empty map)
+                    parameters: array of signature objects, the signatures of the arguments (unset entries deafult to the implemented interface object that matches that index, extra
+                        entries will be ignored) (default: array of class objects of the arguments)
                     returnType: signature object, the signature of the return type, null maps to void (default: class object of returnType)
-                    exceptions: array of signature objects, the signatures of the throwable exceptions (default: array of class objects of declared exceptions)
+                    exceptions: array of signature objects, the signatures of the throwable exceptions (unset entries deafult to the implemented interface object that matches that index,
+                        extra entries will be ignored)(default: array of class objects of declared exceptions)
                 }
                 runtimeAnnotations: an array of the annotation complex type (see bellow), the annotations visible at run time (default: not set, attribute won't be included)
                 compiletimeAnnotations: an array of the annotation complex type (see bellow), the annotations not visible at run time (default: not set, attribute won't be included)
@@ -109,7 +114,9 @@
             enclosingMethod: following complex object, indicating the enclosing method of this class (default: not set, attribute won't be included)
             {
                 clazz: class object, class containing the enclosing method (default: no default)
-                method: method object, the enclosing method (default: no set, enclosing method is an initializer (see JVM specification))
+                name: string, the name of this method (default: no default)
+                parameters: array of class objects, the arguments to this method (default: empty array)
+                returnType: class object, the return type of this method (default: null, void return type)
             }
             sourceDebugExtension: string, arbitrary string with no effect (default: not set, attribute won't be included)
             bootstrapMethods: array of following complex type, used for invokeDynamic instructions (default: not set, attribute won't be included)
@@ -121,9 +128,11 @@
             deprecated: boolean, marks this class as deprecated (default: false, attribute won't be included)
             signature: following complex object, this specifies the generic parts of this class (default: not set, attribute won't be included)
             {
-                indexes: map from strings to arrays of signature objects.  in an array, they're can only be one non-interface.  (this is used for generic classes (<K> would be {K:java.lang.Object}) (default: not set)
-                superClass: signature object for super class (default: class object of super class)
-                interfaces: array of objects in the same format as this object (default: array of class objects of interfaces)
+                types: map from strings to arrays of signature objects.  the 0th array index must be a non-interface or null.
+                    the array is the types the generic type extends (<K extends Object & Cloneable> would have Object as the 0th index and Cloneable as the 1st) (default: empty map)
+                superClass: signature object for super class (should be type "class" signature object) (default: class object of super class)
+                interfaces: array of signature objects for implemented interfaces (should be type "class" signature objects)
+                    (unset entries deafult to the implemented interface object that matches that index, extra entries will be ignored) (default: array of class objects of interfaces)
             }
             runtimeAnnotations: an array of the annotation complex type (see bellow), the annotations visible at run time (default: not set, attribute won't be included)
             compiletimeAnnotations: an array of the annotation complex type (see bellow), the annotations not visible at run time (default: not set, attribute won't be included)
@@ -139,14 +148,25 @@
     string matching a java-format (not internal format) class name
     
     // signature object:
-    class object or
-    "*" or
-    a string in the indexes map (see users of this)
+    one of the following
+    class object
     {
-        super: boolean, true if this is a super wildcard (default: false)
-        extends: boolean, true if this is a (default: false)
-        type: class object, the base class object (default: no default)
-        signatures: array of signature objects describing this (default: empty array)
+        type: "class" string, (types not set + subClazz not set is the same as just a class object of clazz)
+        clazz: class object, the class this describes (default: no default)
+        types: array of following complex type, the generic sub-types (default: empty array)
+        {
+            wild: "*" string or "wild" string or "extends" string or "super" string or "exact", the type of wildness, "*" and "wild" are the same and ignore signature (default: "exact")
+            signature: signature object, the signature to match against (default: no default, ignored when wild is "*")
+        }
+        subClazz: a "class" type signature object, the sub-class referenced (default: not set)
+    }
+    {
+        type: "type" string, (for example the K from <K>)
+        identifier: string, should match a generic type (such as K for <K>)
+    }
+    {
+        type: "array" string, for arrays of generic types
+        signature: signature object, the type of the array component (default: not set)
     }
     
     // annotation object:
@@ -386,8 +406,8 @@
         type: "method" string or "interfaceMethod" string
         clazz: class object, the class that contains this method
         name: string, the name of this method
-        parameters: array of class objects, the argument types of this method
-        returnType: class object, the return type of this method, null maps to void
+        parameters: array of class objects, the argument types of this method (default: empty array)
+        returnType: class object, the return type of this method, null maps to void (default: null, void return type)
     }
     {
         type: "string" start
@@ -402,8 +422,8 @@
         name: string, the name associated with this constant
         descriptor: class object (for fields) or the following complex type, the type of this name and type
         {
-            parameters: array of class objects, the argument types of this descriptor
-            returnType: class object, the return type of this descriptor, null maps to void
+            parameters: array of class objects, the argument types of this descriptor (default: empty array)
+            returnType: class object, the return type of this descriptor, null maps to void (default: null, void return type)
         }
     }
     {
@@ -423,20 +443,20 @@
         isInterface: boolean, true if this references an interface, false if it doesn't; will only be used if the kind is ambiguous (default: not set)
         clazz: class object, the class that contains the method
         name: string, the name of the method
-        parameters: array of class objects, the argument types of the method
-        returnType: class object, the return type of the method, null maps to void
+        parameters: array of class objects, the argument types of the method (default: empty array)
+        returnType: class object, the return type of the method, null maps to void (default: null, void return type)
     }
     {
         type: "methodType" string
-        parameters: array of class objects, the argument types of this method type
-        returnType: class object, the return type of this method type, null maps to void
+        parameters: array of class objects, the argument types of this method type (default: empty array)
+        returnType: class object, the return type of this method type, null maps to void (default: null, void return type)
     }
     {
         type: "invokeDynamic" string
         bootstrapIndex: int, index into the bootstrap method table attribute of the class
         name: string, the name of the method
-        parameters: array of class objects, the argument types of the method
-        returnType: class object, the return type of the method, null maps to void
+        parameters: array of class objects, the argument types of the method (default: empty array)
+        returnType: class object, the return type of the method, null maps to void (default: null, void return type)
     }
     */
     
@@ -609,12 +629,72 @@
         } else if ( typeof obj === "string" ) {
             return "L" + obj.replace(/\./g, "/"); + ";"
         } else {
-            return "(" + toDescriptor(obj.parameters) + ")" + toDescriptor(obj.returnType);
+            return "("
+                   + toDescriptor(getFieldWithDefault("parameters", obj, []) + ")"
+                   + toDescriptor(getFieldWithDefault("returnType", obj, null));
         }
     }
     
-    function parseSignature(obj, indexes) {
-        // TODO implement
+    function parseSignatureForDescriptor(obj) {
+        if ( getClassName(obj) !== null ) {
+            return toDescriptor(obj);
+        }
+        switch ( requireField("type", obj, "signature object") ) {
+            case "class":
+                return toDescriptor(requireField("clazz", obj, "signature object"));
+            case "type":
+                return toDescriptor(javaObject);
+            case "array":
+                return "[" + parseSignatureForDescriptor(requireField("signature", obj, "signature object"));
+            default:
+                throw "unknown signature object type [" + type + "]";
+        }
+    }
+    
+    function parseSignature(obj) {
+        if ( getClassName(obj) !== null ) {
+            return toDescriptor(obj);
+        }
+        var ret = "";
+        switch ( requireField("type", obj, "signature object") ) {
+            case "class":
+                ret += "L";
+                ret += getClassName(requireField("clazz", obj, "signature object"));
+                if ( isSet("types", obj) && obj.types.length > 0 ) {
+                    for each ( var subType of obj.types ) {
+                        switch ( getFieldWithDefault("wild", subType, "exact") ) {
+                            case "*":
+                            case "wild":
+                                ret += "*";
+                                break;
+                            case "extends":
+                                ret += "+" + parseSignature(requireField("signature", subType, "signature object class types"));
+                                break;
+                            case "super":
+                                ret += "-" + parseSignature(requireField("signature", subType, "signature object class types"));
+                                break;
+                            case "exact":
+                                ret += parseSignature(requireField("signature", subType, "signature object class types"));
+                                break;
+                            default:
+                                throw "unknown signature class types wildness [" + subType.wild + "]";
+                        }
+                    }
+                }
+                if ( isSet("subClazz", obj) ) {
+                    ret += "." + parseSignature(obj.subClazz);
+                }
+                break;
+            case "type":
+                ret += "T" + requireField("identifier", obj, "signature object") + ";";
+                break;
+            case "array":
+                ret += "[" + parseSignature(requireField("signature", obj, "signature object"));
+                break;
+            default:
+                throw "unknown signature object type [" + type + "]";
+        }
+        return ret;
     }
     
     function isSet(name, obj) {
@@ -1179,7 +1259,7 @@
             }
         }
                     
-        function writeAttributes(stream, obj) {
+        function writeAttributes(stream, obj, type) {
             var supportedAttributes = {
                 constantValue: true, synthetic: true, deprecated: true, signature: true, runtimeAnnotation: true, compiletimeAnnotations: true, runtimeTypeAnnotations: true,
                 compiletimeTypeAnnotations: true, code: true, lineNumbers: true, localVariables: true, stackMap:true, exceptions: true, runtimeParameterAnnotations: true,
@@ -1199,6 +1279,9 @@
                 var attributeData;
                 var attributeStream;
                 if ( isSet("constantValue", obj.attributes) ) {
+                    if ( type !== "field" ) {
+                        throw "constantValue attribute not valid for " + type;
+                    }
                     stream.writeShort(getConstantIndexUTF8("ConstantValue"));
                     stream.writeInt(2);
                     var ref;
@@ -1245,7 +1328,7 @@
                             attributeStream.writeShort(isSet("catchType", exceptionHandler) ? getConstantIndexClass(exceptionHandler.catchType) : 0);
                         }
                     }
-                    writeAttributes(attributeStream, obj.attributes.code);
+                    writeAttributes(attributeStream, obj.attributes.code, "code");
                     
                     stream.writeShort(getConstantIndexUTF8("Code"));
                     stream.writeInt(attributeData.size());
@@ -1330,22 +1413,84 @@
                 if ( isSet("enclosingMethod", obj.attributes) ) {
                     stream.writeShort(getConstantIndexUTF8("EnclosingMethod"));
                     stream.writeInt(4);
-                    stream.writeShort(getConstantIndex(getConstantIndexClass(requireField("clazz", obj.attribtues.enclosingMethod, "enclosingMethod attribute"))));
-                    // TODO figure out method is represented
+                    stream.writeShort(getConstantIndexClass(requireField("clazz", obj.attributes.enclosingMethod, "enclosingMethod attribute")));
+                    stream.writeShort(getConstantIndex({
+                        type: "nameAndType",
+                        name: requireField("name", obj.attributes.enclosingMethod, "enclosingMethod attribute")),
+                        descriptor: {
+                            parameters: requireField("parameters", obj.attributes.enclosingMethod, "enclosingMethod attribute")),
+                            returnType: requireField("returnType", obj.attributes.enclosingMethod, "enclosingMethod attribute")),
+                        },
                 }
                 if ( getFieldWithDefault("synthetic", obj.attributes, false) ) {
                     stream.writeShort(getConstantIndexUTF8("Synthetic"));
                     stream.writeInt(0);
                 }
                 if ( isSet("signature", obj.attributes) ) {
+                    var sig = "";
+                    switch ( type ) {
+                        case "field":
+                            sig = parseSignature(obj.attributes.signature);
+                            break;
+                        case "method":
+                        case "class":
+                            if ( isSet("types", obj.attributes.signature) && Object.keys(obj.attributes.signature.types).length > 0 ) {
+                                sig += "<";
+                                for ( var name in obj.attributes.signature.types ) {
+                                    sig += name;
+                                    if ( obj.attribtues.signature.types[name].length <= 0 ) {
+                                        sig += ":"
+                                    } else {
+                                        for each ( var subSig in obj.attributes.signature.types[name] ) {
+                                            sig += ":";
+                                            if ( subSig !== null ) {
+                                                sig += parseSignature(subSig);
+                                            }
+                                        }
+                                    }
+                                }
+                                sig += ">";
+                            }
+                            if ( type === "method" ) {
+                                sig += "(";
+                                var params = getFieldWithDefault("parameters", obj.attributes.signature, []);
+                                if ( isSet("parameters", obj) ) {
+                                    for ( var i = 0; i < obj.parameters.length; i++ ) {
+                                        ret += parseSignature(getFieldWithDefault(i, obj.attributes.signature.parameters, obj.parameters[i]));
+                                    }
+                                }
+                                sig += ")";
+                                if ( ! isSet("returnType", obj.attributes.signature) && obj.attributes.signature.returnType !== null ) {
+                                    sig += parseSignature(obj.returnType);
+                                } else {
+                                    sig += parseSignature(obj.attributes.signature.returnType);
+                                }
+                                if ( isSet("exceptions", obj.attributes) ) {
+                                    for ( var i = 0; i < obj.attributes.exceptions.length; i++ ) {
+                                        ret += parseSignature(getFieldWithDefault(i, obj.attributes.signature.exceptions, obj.attributes.exceptions[i]));
+                                    }
+                                }
+                            } else { // type === "class"
+                                sig += parseSignature(getFieldWithDefault("superClass", obj.attributes.signature, obj.superClass));
+                                if ( isSet("interfaces", obj) ) {
+                                    for ( var i = 0; i < obj.interfaces.length; i++ ) {
+                                        ret += parseSignature(getFieldWithDefault(i, obj.attributes.signature.interfaces, obj.interfaces[i]));
+                                    }
+                                }
+                            }
+                            break;
+                        default:
+                            throw "signature attribute not valid for " + type;
+                    }
+                    
                     stream.writeShort(getConstantIndexUTF8("Signature"));
                     stream.writeInt(2);
-                    // TODO parse all types of signatures
+                    strean.writeShort(getConstantIndexUTF8(sig));
                 }
                 if ( isSet("sourceFile", obj.attributes) ) {
                     stream.writeShort(getConstantIndexUTF8("SourceFile"));
                     stream.writeInt(2);
-                    stream.writeShort(getConstantIndexUTF8(obj.attribtues.sourceFile));
+                    stream.writeShort(getConstantIndexUTF8(obj.attributes.sourceFile));
                 }
                 if ( isSet("sourceDebugExtension", obj.attributes) ) {
                     stream.writeShort(getConstantIndexUTF8("SourceDebugExtension"));
@@ -1362,22 +1507,28 @@
                 if ( isSet("localVariables", obj.attributes) ) {
                     stream.writeShort(getConstantIndexUTF8("LocalVariableTable"));
                     stream.writeInt(2 + 10 * obj.attributes.localVariables.length);
+                    var numLocalTypes = 0;
                     for each ( var localVariable in obj.attributes.localVariables ) {
                         stream.writeShort(requireField("startIndex", localVariable, "localVariable attribute"));
                         stream.writeShort(requireField("length", localVariable, "localVariable attribute"));
                         stream.writeShort(getConstantIndexUTF8(requireField("name", localVariable, "localVariable attribute")));
-                        // TODO parse signature for descriptor
+                        stream.writeShort(getConstantIndexUTF8(parseSignatureForDescriptor(requireField("signature", localVariable, "localVariable attribute"))));
                         stream.writeShort(requireField("index", localVariable, "localVariable attribute"));
+                        if ( getClassName(localVariable) !== null ) {
+                            numLocalTypes++;
+                        }
                     }
                     
-                    stream.writeShort(getConstantIndexUTF8("LocalVariableTypeTable"));
-                    stream.writeInt(2 + 10 * obj.attributes.localVariables.length);
-                    for each ( var localVariable in obj.attributes.localVariables ) {
-                        stream.writeShort(requireField("startIndex", localVariable, "localVariable attribute"));
-                        stream.writeShort(requireField("length", localVariable, "localVariable attribute"));
-                        stream.writeShort(getConstantIndexUTF8(requireField("name", localVariable, "localVariable attribute")));
-                        // TODO parse signature for signature
-                        stream.writeShort(requireField("index", localVariable, "localVariable attribute"));
+                    if ( numLocalTypes > 0 ) {
+                        stream.writeShort(getConstantIndexUTF8("LocalVariableTypeTable"));
+                        stream.writeInt(2 + 10 * numLocalTypes;
+                        for each ( var localVariable in obj.attributes.localVariables ) {
+                            stream.writeShort(requireField("startIndex", localVariable, "localVariable attribute"));
+                            stream.writeShort(requireField("length", localVariable, "localVariable attribute"));
+                            stream.writeShort(getConstantIndexUTF8(requireField("name", localVariable, "localVariable attribute")));
+                            stream.writeShort(getConstantIndexUTF8(parseSignature(requireField("signature", localVariable, "localVariable attribute"))));
+                            stream.writeShort(requireField("index", localVariable, "localVariable attribute"));
+                        }
                     }
                 }
                 if ( getFieldWithDefault("deprecated", obj.attributes, false) ) {
@@ -1475,6 +1626,9 @@
                     attributeStream.close();
                 }
                 if ( isSet("annotationDefault", obj.attributes) ) {
+                    if ( type !== "method" ) {
+                        throw "annotationDefault attribute not valid for " + type;
+                    }
                     attributeData = new ByteArrayOutputStream();
                     attributeStream = new DataOutputStream(attributeData);
                     
@@ -1520,7 +1674,7 @@
                 if ( isSet("methodParameters", obj.attributes) ) {
                     stream.writeShort(getConstantIndexUTF8("MethodParameters"));
                     stream.writeInt(1 + 4 * obj.attributes.methodParameters.length);
-                    for each ( var parameter in obj.attribtues.methodParameters ) {
+                    for each ( var parameter in obj.attributes.methodParameters ) {
                         stream.writeShort(isSet("name", parameter) ? getConstantIndexUTF8(parameter.name) : 0);
                         stream.writeShort(getFieldWithDefault("accessFlags", description, 0x0000));
                     }
@@ -1551,7 +1705,7 @@
                 postConstantStream.writeShort(getFieldWithDefault("accessFlags", fields, 0x0001));
                 postConstantStream.writeShrot(getConstantIndexUTF8(requireField("name", field, "field")));
                 postConstantStream.writeShort(getConstantIndexUTF8(toDescriptor(field.type)));
-                writeAttributes(postConstantStream, field);
+                writeAttributes(postConstantStream, field, "field");
             }
         }
         if ( ! isSet("methods", description) ) {
@@ -1565,10 +1719,10 @@
                     parameters: getFieldWithDefault("parameters", method, []),
                     returnType: getFieldWithDefault("returnType", method, null),
                 })));
-                writeAttributes(postConstantStrema, method);
+                writeAttributes(postConstantStrema, method, "method");
             }
         }
-        writeAttributes(postConstantStream, description);
+        writeAttributes(postConstantStream, description, "class");
         
         
         
