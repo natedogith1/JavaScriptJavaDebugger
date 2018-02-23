@@ -483,9 +483,12 @@
     var javaArray = Java.type("java.lang.reflect.Array");
     var Annotation = Java.type("java.lang.annotation.Annotation");
     var javaString = Java.type("java.lang.String");
+    var javaInt = Java.type("int");
     
-    var rootClassLoader = new (Java.extend(ClassLoader))({});
+    var rootClassLoader = new (Java.extend(ClassLoader))(){};
     var rootClassLoaderSuper = Java.super(rootClassLoader);
+    var methodDefineClass = ClassLoader.class.getDeclaredMethod("defineClass", javaString.class, byteArray.class, javaInt.class, javaInt.class);
+    methodDefineClass.setAccessible(true);
     
     // compiled from this code
     /*
@@ -551,7 +554,7 @@
         "AAIAJg=="
     );
     
-    var GeneratingClassLoader = rootClassLoaderSuper.defineClass("GeneratingClassLoader", GeneratingClassLoaderBytes, 0, GeneratingClassLoaderBytes.length).static;
+    var GeneratingClassLoader = methodDefineClass.invoke(rootClassLoader, "GeneratingClassLoader", GeneratingClassLoaderBytes, 0, GeneratingClassLoaderBytes.length).static;
     
     function getClassObject(obj) {
         if ( obj instanceof javaClass ) {
@@ -565,11 +568,11 @@
     
     function getClassName(obj) {
         if ( obj instanceof javaClass ) {
-            return obj.getName();
+            return obj.getName().replace(/\./g,"/");
         } else if ( obj instanceof nashornClass ) {
-            return obj.class.getName();
+            return obj.class.getName().replace(/\./g,"/");
         } else if ( typeof obj === "string" ) {
-            return obj;
+            return obj.replace(/\./g,"/");
         } else {
             return null;
         }
@@ -615,7 +618,6 @@
                 case javaBooleanType:
                     return "Z";
                 case javaVoidType:
-                case null:
                     return "V";
                 default:
                     if ( clazz.getName()[0] === "[" ) {
@@ -624,13 +626,16 @@
                         return "L" + clazz.getName().replace(/\./g, "/") + ";";
                     }
             }
+        } else if ( obj === null ) {
+            return "V";
         } else if ( obj instanceof Array ) {
             return obj.map(toDescriptor).join();
         } else if ( typeof obj === "string" ) {
             return "L" + obj.replace(/\./g, "/"); + ";"
         } else {
             return "("
-                   + toDescriptor(getFieldWithDefault("parameters", obj, []) + ")"
+                   + toDescriptor(getFieldWithDefault("parameters", obj, []))
+                   + ")"
                    + toDescriptor(getFieldWithDefault("returnType", obj, null));
         }
     }
@@ -661,7 +666,7 @@
                 ret += "L";
                 ret += getClassName(requireField("clazz", obj, "signature object"));
                 if ( isSet("types", obj) && obj.types.length > 0 ) {
-                    for each ( var subType of obj.types ) {
+                    for each ( var subType in obj.types ) {
                         switch ( getFieldWithDefault("wild", subType, "exact") ) {
                             case "*":
                             case "wild":
@@ -698,7 +703,7 @@
     }
     
     function isSet(name, obj) {
-        return obj in name && (obj[name] !== null && obj[name] !== undefined);
+        return name in obj && (obj[name] !== null && obj[name] !== undefined);
     }
     
     function getFieldWithDefault(name, obj, def) {
@@ -712,7 +717,7 @@
         return obj[name];
     }
     
-    function classMaker.getClassBytes(description) {
+    classMaker.getClassBytes = function(description) {
         var constants = {}
         var constantRefs = {
             classes: {}
@@ -738,11 +743,11 @@
             invokeDynamics: {},
         }
         
-        function getConstantIndexUTF8(str) {
-            var mappedName = str;
+        function getConstantIndexUTF8(value) {
+            var mappedName = value;
             if ( ! (mappedName in constants.utf8s) ) {
                 constantStream.writeByte(1);
-                constantStream.writeUTF(constant.value);
+                constantStream.writeUTF(value);
                 constants.utf8s[mappedName] = constantId++;
             }
             return constants.utf8s[mappedName];
@@ -850,16 +855,16 @@
                     }
                     return constants.nameAndType[mappedName];
                 case "utf8":
-                    return getConstantIndexUTF8(requireField("value", constant, "utf8 constant");
+                    return getConstantIndexUTF8(requireField("value", constant, "utf8 constant"));
                 case "methodHandle":
-                    var clazzObject = getClassObject(requireField("clazz", constant, "methodHandle constant");
+                    var clazzObject = getClassObject(requireField("clazz", constant, "methodHandle constant"));
                     var kind = requireField("kind", constant, "methodHandle constant");
                     var isInterface =
                         (kind === "invokeStatic" || kind === "invokeSpecial")
-                        ? (clazzObject ? clazzObject.isInterface() : !! requireField("isInterface", constant, "methodHandle constant")
+                        ? (clazzObject ? clazzObject.isInterface() : !! requireField("isInterface", constant, "methodHandle constant"))
                         : kind === "invokeInterface";
                     var descriptor =
-                        ({getField:true, getStatic:true, putField:true, putStatic:true})[kind];
+                        ({getField:true, getStatic:true, putField:true, putStatic:true})[kind]
                         ? toDescriptor(requireField("fieldType", constant, "methodHandle constant"))
                         : toDescriptor({
                             parameters:requireField("parameters", constant, "methodHandle constant"),
@@ -879,7 +884,7 @@
                             case "getStatic":
                             case "putField":
                             case "putStatic":
-                                ref = getConstantIndex({type:"field", clazz:constant.clazz, name:constant.name, type:constant.fieldType});
+                                ref = getConstantIndex({type:"field", clazz:constant.clazz, name:constant.name, descriptor:constant.fieldType});
                                 break;
                             case "invokeVirtual":
                             case "invokeStatic":
@@ -897,8 +902,8 @@
                     }
                     return constants.methodHandles[mappedName];
                 case "methodType":
-                    mappedName = [toDescriptor(requireField("parameters", constant, "methodType constant"),
-                                  toDescriptor(requireField("parameters", constant, "returnType constant"))
+                    mappedName = [toDescriptor(requireField("parameters", constant, "methodType constant")),
+                                  toDescriptor(requireField("parameters", constant, "returnType constant")),
                                  ].join(";");
                     if ( ! (mappedName in constants.methodTypes) ) {
                         var descriptor = getConstantIndexUTF8(toDescriptor({parameters:constant.parameters, returnType:constant.returnType}));
@@ -930,7 +935,7 @@
         
         
         var postConstantData = new ByteArrayOutputStream();
-        var postConstantStream = new DataOutputStream(constantData);
+        var postConstantStream = new DataOutputStream(postConstantData);
         
         function writeCustomData(stream, obj) {
             var constants = getFieldWithDefault("constants", obj, []);
@@ -940,7 +945,7 @@
                 var startIndex = 0;
                 for each ( var constant in constants ) {
                     stream.write(obj.array, startIndex, requireField("address", constant, "arbitraryData constant") - startIndex);
-                    stream.writeShort(getConstantIndex(requireField("constant", constant, "arbitraryData constant"));
+                    stream.writeShort(getConstantIndex(requireField("constant", constant, "arbitraryData constant")));
                     startIndex = constant.address + 2;
                 }
                 stream.write(obj.array, startIndex, obj.array.length - startIndex);
@@ -957,7 +962,7 @@
                         stream.write(buf, 0, countRead);
                         startIndex += countRead;
                     }
-                    stream.writeShort(getConstatnIndex(requireField("constant", constant, "arbitraryData constant"));
+                    stream.writeShort(getConstatnIndex(requireField("constant", constant, "arbitraryData constant")));
                     obj.stream.skip(2);
                 }
                 while ( startIndex < obj.size ) {
@@ -1138,7 +1143,7 @@
                     break;
                 case "localVariable":
                     stream.writeByte(0x40);
-                    for each ( var location of requireField("locations", obj, "type annotation target " + type) ) {
+                    for each ( var location in requireField("locations", obj, "type annotation target " + type) ) {
                         stream.writeShort(requireField("startIndex", obj, "type annotation target " + type + " location"));
                         stream.writeShort(requireField("length", obj, "type annotation target " + type + " location"));
                         stream.writeShort(requireField("index", obj, "type annotation target " + type + " location"));
@@ -1146,7 +1151,7 @@
                     break;
                 case "resourceVariable":
                     stream.writeByte(0x41);
-                    for each ( var location of requireField("locations", obj, "type annotation target " + type) ) {
+                    for each ( var location in requireField("locations", obj, "type annotation target " + type) ) {
                         stream.writeShort(requireField("startIndex", obj, "type annotation target " + type + " location"));
                         stream.writeShort(requireField("length", obj, "type annotation target " + type + " location"));
                         stream.writeShort(requireField("index", obj, "type annotation target " + type + " location"));
@@ -1246,7 +1251,7 @@
                     break;
                 case "uninitialized":
                     stream.writeByte(8);
-                    stream.writeShortrequireField("newOffset", obj, "verificationType uninitialized"));
+                    stream.writeShort(requireField("newOffset", obj, "verificationType uninitialized"));
                     break;
                 case "long":
                     stream.writeByte(4);
@@ -1261,14 +1266,14 @@
                     
         function writeAttributes(stream, obj, type) {
             var supportedAttributes = {
-                constantValue: true, synthetic: true, deprecated: true, signature: true, runtimeAnnotation: true, compiletimeAnnotations: true, runtimeTypeAnnotations: true,
-                compiletimeTypeAnnotations: true, code: true, lineNumbers: true, localVariables: true, stackMap:true, exceptions: true, runtimeParameterAnnotations: true,
-                compiletimeParametersAnnotations: true, annotationDefault: true, methodParameters: true, runtimeAnnotations: true, compiletimeAnnotations: true, sourceFile: true,
-                innerClasses: true, enclosingMethod: true, sourceDebugExtension: true, bootstrapMethods: true,
+                constantValue: true, synthetic: true, deprecated: true, signature: true, runtimeTypeAnnotations: true, compiletimeTypeAnnotations: true, code: true,
+                lineNumbers: true, localVariables: true, stackMap:true, exceptions: true, runtimeParameterAnnotations: true, compiletimeParametersAnnotations: true,
+                annotationDefault: true, methodParameters: true, runtimeAnnotations: true, compiletimeAnnotations: true, sourceFile: true, innerClasses: true,
+                enclosingMethod: true, sourceDebugExtension: true, bootstrapMethods: true,
             }
             var count = getFieldWithDefault("customAttributes", obj, []).length;
             if ( obj.attributes ) {
-                for ( var name of obj.attributes ) {
+                for ( var name in obj.attributes ) {
                     if ( name in supportedAttributes ) {
                         count++;
                     }
@@ -1320,7 +1325,7 @@
                     if ( ! isSet("exceptionHandlers", obj.attributes.code) ) {
                         attributeStream.writeShort(0);
                     } else {
-                        attributeStream.writeShort(obj.attributes.code.length;
+                        attributeStream.writeShort(obj.attributes.code.length);
                         for each ( var exceptionHandler in obj.attributes.code.exceptionHandlers ) {
                             attributeStream.writeShort(requireField("startIndex", exceptionHandler, "exceptionHandler attribute"));
                             attributeStream.writeShort(requireField("endIndex", exceptionHandler, "exceptionHandler attribute"));
@@ -1353,12 +1358,12 @@
                             case "setStack1":
                             case "growStack1":
                                 attributeStream.writeByte(64 + requireField("offset", stackFrame, "stackFrame " + stackFrame.type));
-                                writeVerificationType(attributeStream, requireField("stack", stackFrame, "stackFrame " + stackFrame.type)
+                                writeVerificationType(attributeStream, requireField("stack", stackFrame, "stackFrame " + stackFrame.type));
                                 break;
                             case "extendStack1":
                                 attributeStream.writeByte(247);
                                 attributeStream.writeShort(requireField("offset", stackFrame, "stackFrame " + stackFrame.type));
-                                writeVerificationType(attributeStream, requireField("stack", stackFrame, "stackFrame " + stackFrame.type)
+                                writeVerificationType(attributeStream, requireField("stack", stackFrame, "stackFrame " + stackFrame.type));
                                 break;
                             case "reduceStack":
                             case "chop":
@@ -1407,7 +1412,7 @@
                         stream.writeShort(getConstantIndexClass(requiredField("innerClass", innerClass, "innerClass attribute")));
                         stream.writeShort(isSet("outerClass", innerClass) ? getConstantIndexClass(innerClass.outerClass) : 0);
                         stream.writeShort(isSet("name", innerClass) ? getConstantIndexUTF8(clazz) : 0);
-                        stream.writeShort(requireField("accessFlags", innerClass, "innerClass attribute");
+                        stream.writeShort(requireField("accessFlags", innerClass, "innerClass attribute"));
                     }
                 }
                 if ( isSet("enclosingMethod", obj.attributes) ) {
@@ -1416,11 +1421,12 @@
                     stream.writeShort(getConstantIndexClass(requireField("clazz", obj.attributes.enclosingMethod, "enclosingMethod attribute")));
                     stream.writeShort(getConstantIndex({
                         type: "nameAndType",
-                        name: requireField("name", obj.attributes.enclosingMethod, "enclosingMethod attribute")),
+                        name: requireField("name", obj.attributes.enclosingMethod, "enclosingMethod attribute"),
                         descriptor: {
-                            parameters: requireField("parameters", obj.attributes.enclosingMethod, "enclosingMethod attribute")),
-                            returnType: requireField("returnType", obj.attributes.enclosingMethod, "enclosingMethod attribute")),
+                            parameters: requireField("parameters", obj.attributes.enclosingMethod, "enclosingMethod attribute"),
+                            returnType: requireField("returnType", obj.attributes.enclosingMethod, "enclosingMethod attribute"),
                         },
+                    }));
                 }
                 if ( getFieldWithDefault("synthetic", obj.attributes, false) ) {
                     stream.writeShort(getConstantIndexUTF8("Synthetic"));
@@ -1521,7 +1527,7 @@
                     
                     if ( numLocalTypes > 0 ) {
                         stream.writeShort(getConstantIndexUTF8("LocalVariableTypeTable"));
-                        stream.writeInt(2 + 10 * numLocalTypes;
+                        stream.writeInt(2 + 10 * numLocalTypes);
                         for each ( var localVariable in obj.attributes.localVariables ) {
                             stream.writeShort(requireField("startIndex", localVariable, "localVariable attribute"));
                             stream.writeShort(requireField("length", localVariable, "localVariable attribute"));
@@ -1681,19 +1687,19 @@
                 }
             }
             for each ( var customAttribtue in getFieldWithDefault("customAttributes", obj, []) ) {
-                stream.writeShort(getConstantIndexUTF8(requireField("name", customAttribute, "custom attribute"));
+                stream.writeShort(getConstantIndexUTF8(requireField("name", customAttribute, "custom attribute")));
                 writeCustomData(requireField("data", customAttribute, "custom attribute"));
             }
         }
         
         postConstantStream.writeShort(getFieldWithDefault("accessFlags", description, 0x0021));
-        postConstantStream.writeShort(getConstantIndexClass(isSet("value", description) ? description.value : "createPackage.CreatedClass" + Math.random().toString().substring(2)));
+        postConstantStream.writeShort(getConstantIndexClass(isSet("name", description) ? description.name : "createPackage.CreatedClass" + Math.random().toString().substring(2)));
         postConstantStream.writeShort(getConstantIndexClass(getFieldWithDefault("superClass", description, javaObject)));
-        if ( ! isSet("interfaces", description) {
+        if ( ! isSet("interfaces", description) ) {
             postConstantStream.writeShort(0);
         } else {
             postConstantStream.writeShort(description.interfaces.length);
-            for each ( var iface in description.interfaces.length ) {
+            for each ( var iface in description.interfaces ) {
                 postConstantStream.writeShort(getConstantIndexClass(iface));
             }
         }
@@ -1701,9 +1707,9 @@
             postConstantStream.writeShort(0);
         } else {
             postConstantStream.writeShort(description.fields.length);
-            for each ( var field in description.fields.length ) {
-                postConstantStream.writeShort(getFieldWithDefault("accessFlags", fields, 0x0001));
-                postConstantStream.writeShrot(getConstantIndexUTF8(requireField("name", field, "field")));
+            for each ( var field in description.fields ) {
+                postConstantStream.writeShort(getFieldWithDefault("accessFlags", field, 0x0001));
+                postConstantStream.writeShort(getConstantIndexUTF8(requireField("name", field, "field")));
                 postConstantStream.writeShort(getConstantIndexUTF8(toDescriptor(field.type)));
                 writeAttributes(postConstantStream, field, "field");
             }
@@ -1719,7 +1725,7 @@
                     parameters: getFieldWithDefault("parameters", method, []),
                     returnType: getFieldWithDefault("returnType", method, null),
                 })));
-                writeAttributes(postConstantStrema, method, "method");
+                writeAttributes(postConstantStream, method, "method");
             }
         }
         writeAttributes(postConstantStream, description, "class");
