@@ -37,6 +37,7 @@
   var Modifier = Java.type("java.lang.reflect.Modifier");
   var MinecraftServer = debugUtils.findClass("net.minecraft.server.MinecraftServer").static;
   var DimensionManager = debugUtils.findClass("net.minecraftforge.common.DimensionManager").static;
+  var ObjectToString = Java.type("java.lang.Object").class.getMethod("toString");
   
   // based on https://github.com/bspkrs/MCPMappingViewer/
   var versionURL = new URL("http://export.mcpbot.bspk.rs/versions.json");
@@ -214,12 +215,19 @@
         if ( name == "toString" ) {
           // Java Class wrappers don't have a toString, so we give them one
           if ( typeof obj.class != "undefined" && obj.class instanceof Class && obj.class.static == obj ) {
-            return function(){"[adapted]" + obj};
+            return "[adapted]" + obj;
           }
         }
         var keys = getRealKeys(obj, name);
-        if ( keys.length <= 0 )
-          throw new Error(name + " does not exist");
+        if ( keys.length <= 0 ) {
+          if ( name == "toString" ) {
+            return ObjectToString.invoke(obj);
+          } else if ( name == "valueOf" ) {
+            return this;
+          } else {
+            throw new Error(name + " does not exist");
+          }
+        }
         var args = [obj,keys[0]];
         for ( var i = 1; i < arguments.length; i++ )
           args.push(vanilla.unwrap(arguments[i]));
@@ -262,7 +270,7 @@
       },*/ // same as __getIds__, but __getIds__ takes precidence
       __getValues__ : function() {
         var arr = [];
-        for each ( e in obj ) {
+        for each ( var e in obj ) {
           arr.push(vanilla.wrap(e));
         }
         return e;
