@@ -209,7 +209,7 @@
         return vanilla.wrap(obj[getRealKey(obj, key)]);
       },
       __put__ : function(key, value, strict) {
-        return vanilla.wrap(obj[getRealKey(obj, key)] = value);
+        return vanilla.wrap(obj[getRealKey(obj, key)] = minecraft.unwrap(value));
       },
       __call__ : function(name) {
         if ( name == "toString" ) {
