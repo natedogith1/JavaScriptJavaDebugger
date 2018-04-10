@@ -77,6 +77,7 @@
 
   debugUtils.optimal=function(list, valuesFunction){
       var optimals = [];
+      var items = [];
       debugUtils.findInside(list,function(item){
           var val = valuesFunction(item);
           var shouldAddFinal = true
@@ -91,15 +92,17 @@
               }
               if(!shouldKeep && !isEqual) {
                   optimals.splice(i,1);
+                  items.splice(i,1);
                   i--;
               }
               shouldAddFinal &= shouldAdd | isEqual;
           }
           if(shouldAddFinal) {
               optimals[optimals.length] = val;
+              items[items.length] = item;
           }
       })
-      return optimals
+      return items
   }
   
   debugUtils.getStaticField = function(clazz, fieldName) {
