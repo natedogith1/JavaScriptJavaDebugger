@@ -355,88 +355,115 @@
   vanilla.getPlayer = function(str) {
     return vanilla.wrap(MinecraftServer).getServer().getConfigurationManager().getPlayerByUsername(str);
   }
-  vanilla.getWorld = function(id) {
-    return vanilla.wrap(DimensionManager).getWorld(id);
-  }
   
   if ( MinecraftForge ) {
-      var eventHandlerClassCache = {};
-      var classLoader = new (Java.extend(ClassLoader))(MinecraftForge.getClassLoader()){
-          findClass: function(name) {
-              if ( name in eventHandlerClassCache ) {
-                  return eventHandlerClassCache[name];
-              }
-          }
-      };
-      var defineClass = ClassLoader.getDeclaredMethod("defineClass");
-      defineClass.setAccessible(true);
-      //compiled from this code, split on cpw.mods.fml.common.eventhandler.Event and eventHandlers.cpw.mods.fml.common.eventhandler.Event constants and the priority value
-      /*
-      package eventHandlers.normal.net.minecraftforge.fml.common.eventhandler;
-      public class Event {
-          private java.util.function.Consumer<cpw.mods.fml.common.eventhandler.Event> func;
-          public void Event(java.util.function.Consumer<cpw.mods.fml.common.eventhandler.Event> func) {
-              this.func = func;
-          }
-          @cpw.mods.fml.common.eventhandler.SubscribeEvent(priority=cpw.mods.fml.common.eventhandler.EventPriority.NORMAL)
-          public void handleEvent(cpw.mods.fml.common.eventhandler.Event event) {
-              func.accept(event);
-          }
+    vanilla.getWorld = function(id) {
+      return vanilla.wrap(DimensionManager).getWorld(id);
+    }
+    
+    var eventHandlerClassCache = {};
+    var classLoader = new (Java.extend(ClassLoader))(MinecraftForge.getClassLoader()){
+      findClass: function(name) {
+        if ( name in eventHandlerClassCache ) {
+          return eventHandlerClassCache[name];
+        }
       }
-      */
-      // '"' + btoa(str.split(" ").map(x=>String.fromCharCode(parseInt(x,16))).join("")).match(/.{1,64}/g).join('" +\n"') + '"'
-      var eventHandlerBytes1 = Base64.getDecoder().decode(
-        ""
-      )
-      var eventHandlerBytes2 = Base64.getDecoder().decode(
-        ""
-      )
-      var eventHandlerBytes3 = Base64.getDecoder().decode(
-        ""
-      )
-      var eventHandlerBytes4 = Base64.getDecoder().decode(
-        ""
-      )
-      vanilla.registerEventHandler = function(eventClass, func, priority) {
-          if ( classLoader.loadClass(eventClass.getName()) != eventClass ) {
-              throw eventClass.getName() + " does not match the one returned from the class loader";
-          }
-          if ( arguments.length < 3 ) {
-              priority = priority; // TODO set to whatever values we expect
-          }
-          var newName = "eventHandlers." + priority + eventClass.getName();
-          if ( ! (newName in eventHandlerClassCache) ) {
-              var byteOutput = new ByteArrayOutputStream();
-              var dataOutput = new DataOutputStream(byteOutput);
-              dataOutput.write(eventHandlerBytes1, 0, eventHandlerBytes1.length);
-              dataOutput.writeUTF(eventClass.getName());
-              dataOutput.write(eventHandlerBytes2, 0, eventHandlerBytes2.length);
-              dataOutput.writeUTF(newName);
-              dataOutput.write(eventHandlerBytes3, 0, eventHandlerBytes2.length);
-              dataOutpt.writeUTF(priorty);
-              dataOutput.write(eventHandlerBytes4, 0, eventHandlerBytes2.length);
-              dataOutput.close();
-              eventHandlerClassCache[newName] = defineClass.invoke(classLoader, byteOutput.toByteArray());
-          }
-          var handler = new eventHandlerClassCache[newName](func);
-          MinecraftForge.EVENT_BUS.register(handler);
-          return handler;
+    };
+    var defineClass = ClassLoader.getDeclaredMethod("defineClass");
+    defineClass.setAccessible(true);
+    //compiled from this code, split on cpw.mods.fml.common.eventhandler.Event and eventHandlers.cpw.mods.fml.common.eventhandler.Event constants and the priority value
+    /*
+    package eventHandlers.normal.cpw.mods.fml.common.eventhandler;
+    public class Event {
+      private java.util.function.Consumer func;
+      public void Event(java.util.function.Consumer func) {
+        this.func = func;
       }
-      vanilla.unregisterEventHandler = function(handler) {
-          MinecraftForge.EVENT_BUS.unregister(handler);
+      @cpw.mods.fml.common.eventhandler.SubscribeEvent(priority=cpw.mods.fml.common.eventhandler.EventPriority.NORMAL)
+      public void handleEvent(cpw.mods.fml.common.eventhandler.Event event) {
+        func.accept(event);
       }
-      var ServerTickEvent = classLoader.loadClass("cpw.mods.fml.common.gameevent.TickEvent$ServerTickEvent");
-      vanilla.runOnServerThread = function(func) {
-          var first = true;
-          var handler;
-          handler = vanilla.registerEventHandler(ServerTickEvent, function(event){
-              if ( first ) {
-                  first = false;
-                  vanilla.unregisterEventHandler(handler);
-                  func();
-              }
-          });
+    }
+    */
+    // '"' + btoa(str.split(" ").map(x=>String.fromCharCode(parseInt(x,16))).join("")).match(/.{1,64}/g).join('" +\n"') + '"'
+    var eventHandlerBytes = [
+      "yv66vgAAADQAIAoABQAXCQAEABgLABkAGgcAGwcAHAEABGZ1bmMBAB1MamF2YS91" +
+      "dGlsL2Z1bmN0aW9uL0NvbnN1bWVyOwEABjxpbml0PgEAAygpVgEABENvZGUBAA9M" +
+      "aW5lTnVtYmVyVGFibGUBAAVFdmVudAEAIChMamF2YS91dGlsL2Z1bmN0aW9uL0Nv" +
+      "bnN1bWVyOylWAQALaGFuZGxlRXZlbnQB",
+      
+      "AQAZUnVudGltZVZpc2libGVBbm5vdGF0aW9ucwEAMUxjcHcvbW9kcy9mbWwvY29t" +
+      "bW9uL2V2ZW50aGFuZGxlci9TdWJzY3JpYmVFdmVudDsBAAhwcmlvcml0eQEAMExj" +
+      "cHcvbW9kcy9mbWwvY29tbW9uL2V2ZW50aGFuZGxlci9FdmVudFByaW9yaXR5OwE=",
+      
+      "AQAKU291cmNlRmlsZQEACkV2ZW50LmphdmEMAAgACQwABgAHBwAdDAAeAB8B",
+      
+      "AQAQamF2YS9sYW5nL09iamVjdAEAG2phdmEvdXRpbC9mdW5jdGlvbi9Db25zdW1l" +
+      "cgEABmFjY2VwdAEAFShMamF2YS9sYW5nL09iamVjdDspVgAhAAQABQAAAAEAAgAG" +
+      "AAcAAAADAAEACAAJAAEACgAAAB0AAQABAAAABSq3AAGxAAAAAQALAAAABgABAAAA" +
+      "AgABAAwADQABAAoAAAAiAAIAAgAAAAYqK7UAArEAAAABAAsAAAAKAAIAAAAFAAUA" +
+      "BgABAA4ADwACAAoAAAAnAAIAAgAAAAsqtAACK7kAAwIAsQAAAAEACwAAAAoAAgAA" +
+      "AAkACgAKABAAAAANAAEAEQABABJlABMAFAABABUAAAACABY="
+    ]
+    // 0 = this, 1 = target, 2 = priority
+    var eventHandlerMidStrings = [
+        "(L%1;)V",
+        "%2",
+        "%0"
+    ]
+    for ( var i = 0; i < eventHandlerBytes.length; i++ ) {
+      eventHandlerBytes[i] = Base64.getDecoder().decode(eventHandlerBytes[i]);
+    }
+    var EventPriority = classLoader.loadClass("cpw.mods.fml.common.eventhandler.EventPriority").static;
+    vanilla.registerEventHandler = function(eventClass, func, priority) {
+      if ( classLoader.loadClass(eventClass.getName()) != eventClass ) {
+        throw "[" eventClass.getName() + "] does not match the one returned from the class loader";
       }
+      if ( arguments.length < 3 ) {
+        priority = "NORMAL"; // TODO set to whatever values we expect
+      } else {
+        priority = ("" + priority).toUpperCase();
+        try { 
+          EventPriority.valueOf(priority);
+        } catch (e) {
+          throw "'" priority + "' is not a valid priority"
+        }
+      }
+      var newName = "eventHandlers." + priority + eventClass.getName();
+      if ( ! (newName in eventHandlerClassCache) ) {
+        var internalThis = newName.replace(/\./g, "/");
+        var internalTarget = eventClass.getName().replace(/\./g, "/");
+        var internalPriority = priority;
+        
+        var byteOutput = new ByteArrayOutputStream();
+        var dataOutput = new DataOutputStream(byteOutput);
+        var i;
+        for ( var i = 0; i < eventHandlerBytes.length - 1; i++ ) {
+            dataOutput.write(eventHandlerBytes[i], 0, eventHandlerBytes[i].length);
+            dataOutput.writeUTF(javaString.format(eventHandlerMidStrings[i], internalThis, internalTarget, internalPriority));
+        }
+        dataOutput.write(eventHandlerBytes[i], 0, eventHandlerBytes[i].length);
+        dataOutput.close();
+        eventHandlerClassCache[newName] = defineClass.invoke(classLoader, byteOutput.toByteArray());
+      }
+      var handler = new eventHandlerClassCache[newName](func);
+      MinecraftForge.EVENT_BUS.register(handler);
+      return handler;
+    }
+    vanilla.unregisterEventHandler = function(handler) {
+        MinecraftForge.EVENT_BUS.unregister(handler);
+    }
+    var ServerTickEvent = classLoader.loadClass("cpw.mods.fml.common.gameevent.TickEvent$ServerTickEvent");
+    vanilla.runOnServerThread = function(func) {
+      var first = true;
+      var handler;
+      handler = vanilla.registerEventHandler(ServerTickEvent, function(event){
+        if ( first ) {
+          first = false;
+          vanilla.unregisterEventHandler(handler);
+          func();
+        }
+      });
     }
   }
   return vanilla;
