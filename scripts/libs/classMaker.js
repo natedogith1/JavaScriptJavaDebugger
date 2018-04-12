@@ -718,6 +718,9 @@
     }
     
     classMaker.getClassBytes = function(description) {
+        if ( arguments.length < 1 ) {
+            description = {};
+        }
         var constants = {}
         var constantRefs = {
             classes: {}
@@ -765,7 +768,7 @@
         }
         
         function getConstantIndex(constant) {
-            var mappingName;
+            var mappedName;
             switch ( constant.type ) {
                 case "class":
                     return getConstantIndexClass(requireField("value", constant, "class constant"));
@@ -801,7 +804,7 @@
                     return constants.methods[mappedName];
                 case "string":
                     mappedName = "" + requireField("value", constant, "string constant");
-                    if ( ! (mappedName in constans.strings) ) {
+                    if ( ! (mappedName in constants.strings) ) {
                         var value = getConstantIndexUTF8(constant.value);
                         constantStream.writeByte(8);
                         constantStream.writeShort(value);
