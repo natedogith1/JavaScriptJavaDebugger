@@ -85,7 +85,7 @@
               var shouldKeep = false;
               var isEqual = true;
               var shouldAdd = false;
-              for(var j = 1; j < val.length; j++) {
+              for(var j = 0; j < val.length; j++) {
                   isEqual &= optimals[i][j] == val[j];
                   shouldKeep |= optimals[i][j] > val[j];
                   shouldAdd |= val[j] > optimals[i][j];
