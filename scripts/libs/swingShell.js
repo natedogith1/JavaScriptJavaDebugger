@@ -23,7 +23,7 @@
 (function(){
 	var swingShell = {};
 
-	swingShell.init_shell = function(args) {
+	swingShell.initShell = function(args) {
 		var resultShell = Object.create(shell.loadLib("baseShell").baseShell);
 
 		Java.type("javax.swing.SwingUtilities").invokeLater(function(){

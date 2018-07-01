@@ -31,7 +31,7 @@
 (function(){
 	var fileShell = {};
 
-	fileShell.init_shell = function(args) {
+	fileShell.initShell = function(args) {
 		var resultShell = Object.create(shell.loadLib("baseShell").baseShell);
 
 		(function(){

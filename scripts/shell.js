@@ -134,8 +134,8 @@ shell.libraryPath = shell.parseEscapes(shell.libraryPath);
 		}
 		if ( typeof script == "function" ) {
 			script(scriptArgs);
-		} else if ( typeof script == "object" && typeof script.init_shell == "function" ) {
-			script.init_shell(scriptArgs);
+		} else if ( typeof script == "object" && typeof script.initShell == "function" ) {
+			script.initShell(scriptArgs);
 		}
 	}
 })();
