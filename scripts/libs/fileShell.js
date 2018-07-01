@@ -215,19 +215,7 @@
 							codeThread.interrupt();
 						} else if ( curChar == "\n".charCodeAt(0) ) {
 							if ( ! codeThread ) {
-								runFunction(function(){
-									try {
-										var tmp = eval;
-										// give eval a different name, so that it
-										// executes in the global context
-										var res = tmp(curText.toString());
-										if ( typeof res != "undefined" ) {
-											print(res);
-										}
-									} catch( e ) {
-										print(e);
-									}
-								});
+								runFunction(resultShell.stringToFunction(curText.toString()));
 							} else {
 								inWriter.write("" + curText + "\n");
 							}
