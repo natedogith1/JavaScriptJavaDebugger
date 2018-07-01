@@ -193,7 +193,7 @@
 				for each ( var e in obj ) {
 					arr.push(vanilla.wrap(e));
 				}
-				return e;
+				return arr;
 			},
 			__has__ : function(key) {
 				return getRealKeyRaw(obj, key) in obj;
@@ -327,7 +327,7 @@
 		var EventPriority = classLoader.loadClass("cpw.mods.fml.common.eventhandler.EventPriority").static;
 		vanilla.registerEventHandler = function(eventClass, func, priority) {
 			if ( classLoader.loadClass(eventClass.getName()) != eventClass ) {
-				throw "[" eventClass.getName() + "] does not match the one returned from the class loader";
+				throw "[" + eventClass.getName() + "] does not match the one returned from the class loader";
 			}
 			if ( arguments.length < 3 ) {
 				priority = "NORMAL"; // TODO set to whatever values we expect
@@ -336,7 +336,7 @@
 				try { 
 					EventPriority.valueOf(priority);
 				} catch (e) {
-					throw "'" priority + "' is not a valid priority"
+					throw "'" + priority + "' is not a valid priority"
 				}
 			}
 			var newName = "eventHandlers." + priority + eventClass.getName();
