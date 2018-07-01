@@ -1,1 +1,1 @@
-java -jar debugger.jar "./scripts/swingShell.js;inst:args:;./scripts/libs/;./test/print2.js:a\;b;./test/print2.js;./test/print2.js:\\\b"
+java -jar debugger.jar "./scripts/shell.js;inst:args:;./scripts/libs/;swingShell:!./test/print2.js:a\\\\\\;b\\;!./test/print2.js\\;!./test/print2.js:\\\b"

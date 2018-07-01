@@ -1,1 +1,1 @@
-java -javaagent:"debugger.jar=./scripts/swingShell.js;inst:args:;./scripts/libs/" -jar debugger.jar "./scripts/nothing.js;inst:args:;"
+java -javaagent:"debugger.jar=./scripts/shell.js;inst:args:;./scripts/libs/;swingShell" -jar debugger.jar "./scripts/nothing.js;inst:args:;"

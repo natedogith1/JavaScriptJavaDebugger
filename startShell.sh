@@ -1,1 +1,1 @@
-java -jar debugger.jar "./scripts/swingShell.js;inst:args:;./scripts/libs/;!./scripts/included.js"
+java -jar debugger.jar "./scripts/shell.js;inst:args:;./scripts/libs/;swingShell"
