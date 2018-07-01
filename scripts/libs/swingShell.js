@@ -192,7 +192,7 @@
 			},
 			getNext: function(item) { // get the next item in the list
 			  if ( this.cur == this.head )
-				this.lowDefault = item; // story the current input if we're not in history yet
+				this.lowDefault = item; // store the current input if we're not in history yet
 			  if ( this.cur == null || this.cur.next == null )
 				return null;
 			  this.cur = this.cur.next;
@@ -277,20 +277,24 @@
 					textArea.setCaretPosition(documentObject.inputStart);
 				  event.consume();
 				}
-			  } else if ( event.getKeyCode() == KeyEvent.VK_UP ) { // go up in history
-				var cur = documentObject.getInputCurrent();
-				var next = history.getNext(cur);
-				if ( next != null && next != cur )
-				  documentObject.setInput(next);
-				textArea.setCaretPosition(document.getLength());
-				event.consume();
-			  } else if ( event.getKeyCode() == KeyEvent.VK_DOWN ) { // go down in history
-				var cur = documentObject.getInputCurrent();
-				var prev = history.getPrevious(cur);
-				if ( prev != null && prev != cur )
-				  documentObject.setInput(prev);
-				textArea.setCaretPosition(document.getLength());
-				event.consume();
+			  } else if ( event.getKeyCode() == KeyEvent.VK_UP ) { // go up in history, but only if at top of input
+				if ( textArea.getLineOfOffset(textArea.getCaretPosition()) == textArea.getLineOfOffset(documentObject.inputStart) ) {
+					var cur = documentObject.getInputCurrent();
+					var next = history.getNext(cur);
+					if ( next != null && next != cur )
+					  documentObject.setInput(next);
+					textArea.setCaretPosition(document.getLength());
+					event.consume();
+				}
+			  } else if ( event.getKeyCode() == KeyEvent.VK_DOWN ) { // go down in history, but only if at bottom of input
+				if ( textArea.getLineOfOffset(textArea.getCaretPosition()) == textArea.getLineOfOffset(document.getLength()) ) {
+					var cur = documentObject.getInputCurrent();
+					var prev = history.getPrevious(cur);
+					if ( prev != null && prev != cur )
+					  documentObject.setInput(prev);
+					textArea.setCaretPosition(document.getLength());
+					event.consume();
+				}
 			  } else if ( event.getKeyCode() == KeyEvent.VK_V ) {
 				if ( event.isControlDown() ) {
 				  if ( textArea.getCaretPosition() < documentObject.inputStart ) {
