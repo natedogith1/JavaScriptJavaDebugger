@@ -124,15 +124,15 @@
 			}
 		}
 		mappingZipStream.close();
-		infosCache[minecraftVersions] = result;
+		infosCache[minecraftVersion] = result;
 	}
 
 	minecraftData.getInfos = function(minecraftVersion) {
 		if ( !(minecraftVersion in infosCache) ) {
-			minecraftdata.updateInfosCache(minecraftVersion);
+			minecraftData.updateInfosCache(minecraftVersion);
 		}
 		return infosCache[minecraftVersion];
 	}
 
 	return minecraftData;
-});
+})();

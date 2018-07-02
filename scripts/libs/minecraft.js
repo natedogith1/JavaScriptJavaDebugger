@@ -14,10 +14,11 @@
 		registerEventHandler: null, // registerEventHandler(eventClass, handler function, priority (defualt=NORMAL)), returns a handler instance
 		unregisterEventHandler: null, // given the result of registerEventHandler, unregisters the event handler
 		runOnServerThread: null, // runs a function on the server thread
+		eventHandlers = [], // all registered event handlers
 	};
 	var debugUtils = shell.loadLib("debugUtils");
 	var minecraftVersion;
-	
+
 	var RealmsSharedConstants = debugUtils.findClass("net.minecraft.realms.RealmsSharedConstants");
 	var MinecraftForge = debugUtils.findClass("net.minecraftforge.common.MinecraftForge");
 	if ( RealmsSharedConstants ) {
@@ -40,7 +41,9 @@
 	var ClassLoader = Java.type("java.lang.ClassLoader");
 	var DataOutputStream = Java.type("java.io.DataOutputStream");
 	var ByteArrayOutputStream = Java.type("java.io.ByteArrayOutputStream");
-	
+	var byteArray = Java.type("byte[]");
+	var javaInt = Java.type("int");
+
 	var primitiveTypes = {};
 	primitiveTypes["undefined"] = true,
 	primitiveTypes["boolean"] = true;
@@ -93,7 +96,7 @@
 		}
 		tmp.unshift(key);
 		return tmp.filter(function(searge){
-			try { 
+			try {
 				return obj.getField(searge);
 			} catch (e) {
 				return obj[searge] != null;
@@ -186,7 +189,7 @@
 				return arr;
 			},
 			/*__getKeys__ : function() {
-				
+
 			},*/ // same as __getIds__, but __getIds__ takes precidence
 			__getValues__ : function() {
 				var arr = [];
@@ -265,28 +268,22 @@
 	vanilla.getPlayer = function(str) {
 		return vanilla.wrap(MinecraftServer).getServer().getConfigurationManager().getPlayerByUsername(str);
 	}
-	
+
 	if ( MinecraftForge ) {
 		vanilla.getWorld = function(id) {
 			return vanilla.wrap(DimensionManager).getWorld(id);
 		}
-		
-		var eventHandlerClassCache = {};
-		var classLoader = new (Java.extend(ClassLoader))(MinecraftForge.getClassLoader()){
-			findClass: function(name) {
-				if ( name in eventHandlerClassCache ) {
-					return eventHandlerClassCache[name];
-				}
-			}
-		};
-		var defineClass = ClassLoader.getDeclaredMethod("defineClass");
-		defineClass.setAccessible(true);
+
+		var classLoader = MinecraftForge.getClassLoader();
+		var resourceCache = classLoader.getClass().getDeclaredField("resourceCache");
+		resourceCache.setAccessible(true);
+
 		//compiled from this code, split on cpw.mods.fml.common.eventhandler.Event and eventHandlers.cpw.mods.fml.common.eventhandler.Event constants and the priority value
 		/*
-		package eventHandlers.normal.cpw.mods.fml.common.eventhandler;
+		package eventHandlers.NORMAL.cpw.mods.fml.common.eventhandler;
 		public class Event {
 			private java.util.function.Consumer func;
-			public void Event(java.util.function.Consumer func) {
+			public Event(java.util.function.Consumer func) {
 				this.func = func;
 			}
 			@cpw.mods.fml.common.eventhandler.SubscribeEvent(priority=cpw.mods.fml.common.eventhandler.EventPriority.NORMAL)
@@ -297,33 +294,34 @@
 		*/
 		// '"' + btoa(str.split(" ").map(x=>String.fromCharCode(parseInt(x,16))).join("")).match(/.{1,64}/g).join('" +\n"') + '"'
 		var eventHandlerBytes = [
-			"yv66vgAAADQAIAoABQAXCQAEABgLABkAGgcAGwcAHAEABGZ1bmMBAB1MamF2YS91" +
-			"dGlsL2Z1bmN0aW9uL0NvbnN1bWVyOwEABjxpbml0PgEAAygpVgEABENvZGUBAA9M" +
-			"aW5lTnVtYmVyVGFibGUBAAVFdmVudAEAIChMamF2YS91dGlsL2Z1bmN0aW9uL0Nv" +
-			"bnN1bWVyOylWAQALaGFuZGxlRXZlbnQB",
-			
+			"yv66vgAAADQAHwoABQAVCQAEABYLABcAGAcAGQcAGgEABGZ1bmMBAB1MamF2YS91" +
+			"dGlsL2Z1bmN0aW9uL0NvbnN1bWVyOwEABjxpbml0PgEAIChMamF2YS91dGlsL2Z1" +
+			"bmN0aW9uL0NvbnN1bWVyOylWAQAEQ29kZQEAD0xpbmVOdW1iZXJUYWJsZQEAC2hh" +
+			"bmRsZUV2ZW50AQ==",
+
 			"AQAZUnVudGltZVZpc2libGVBbm5vdGF0aW9ucwEAMUxjcHcvbW9kcy9mbWwvY29t" +
 			"bW9uL2V2ZW50aGFuZGxlci9TdWJzY3JpYmVFdmVudDsBAAhwcmlvcml0eQEAMExj" +
 			"cHcvbW9kcy9mbWwvY29tbW9uL2V2ZW50aGFuZGxlci9FdmVudFByaW9yaXR5OwE=",
-			
-			"AQAKU291cmNlRmlsZQEACkV2ZW50LmphdmEMAAgACQwABgAHBwAdDAAeAB8B",
-			
-			"AQAQamF2YS9sYW5nL09iamVjdAEAG2phdmEvdXRpbC9mdW5jdGlvbi9Db25zdW1l" +
-			"cgEABmFjY2VwdAEAFShMamF2YS9sYW5nL09iamVjdDspVgAhAAQABQAAAAEAAgAG" +
-			"AAcAAAADAAEACAAJAAEACgAAAB0AAQABAAAABSq3AAGxAAAAAQALAAAABgABAAAA" +
-			"AgABAAwADQABAAoAAAAiAAIAAgAAAAYqK7UAArEAAAABAAsAAAAKAAIAAAAFAAUA" +
-			"BgABAA4ADwACAAoAAAAnAAIAAgAAAAsqtAACK7kAAwIAsQAAAAEACwAAAAoAAgAA" +
-			"AAkACgAKABAAAAANAAEAEQABABJlABMAFAABABUAAAACABY="
+
+			"AQAKU291cmNlRmlsZQEACkV2ZW50LmphdmEMAAgAGwwABgAHBwAcDAAdAB4B",
+
+			"AQAQamF2YS9sYW5nL09iamVjdAEAAygpVgEAG2phdmEvdXRpbC9mdW5jdGlvbi9D" +
+			"b25zdW1lcgEABmFjY2VwdAEAFShMamF2YS9sYW5nL09iamVjdDspVgAhAAQABQAA" +
+			"AAEAAgAGAAcAAAACAAEACAAJAAEACgAAACoAAgACAAAACiq3AAEqK7UAArEAAAAB" +
+			"AAsAAAAOAAMAAAAEAAQABQAJAAYAAQAMAA0AAgAKAAAAJwACAAIAAAALKrQAAiu5" +
+			"AAMCALEAAAABAAsAAAAKAAIAAAAJAAoACgAOAAAADQABAA8AAQAQZQARABIAAQAT" +
+			"AAAAAgAU"
 		]
-		// 0 = this, 1 = target, 2 = priority
+		// 1 = this, 2 = target, 3 = priority
 		var eventHandlerMidStrings = [
-				"(L%1;)V",
-				"%2",
-				"%0"
+				"(L%2$s;)V",
+				"%3$s",
+				"%1$s"
 		]
 		for ( var i = 0; i < eventHandlerBytes.length; i++ ) {
 			eventHandlerBytes[i] = Base64.getDecoder().decode(eventHandlerBytes[i]);
 		}
+		var handledClasses = {}
 		var EventPriority = classLoader.loadClass("cpw.mods.fml.common.eventhandler.EventPriority").static;
 		vanilla.registerEventHandler = function(eventClass, func, priority) {
 			if ( classLoader.loadClass(eventClass.getName()) != eventClass ) {
@@ -333,18 +331,18 @@
 				priority = "NORMAL"; // TODO set to whatever values we expect
 			} else {
 				priority = ("" + priority).toUpperCase();
-				try { 
+				try {
 					EventPriority.valueOf(priority);
 				} catch (e) {
 					throw "'" + priority + "' is not a valid priority"
 				}
 			}
-			var newName = "eventHandlers." + priority + eventClass.getName();
-			if ( ! (newName in eventHandlerClassCache) ) {
+			var newName = "eventHandlers." + priority +"." + eventClass.getName();
+			if ( ! (newName in handledClasses) ) {
 				var internalThis = newName.replace(/\./g, "/");
 				var internalTarget = eventClass.getName().replace(/\./g, "/");
 				var internalPriority = priority;
-				
+
 				var byteOutput = new ByteArrayOutputStream();
 				var dataOutput = new DataOutputStream(byteOutput);
 				var i;
@@ -354,14 +352,20 @@
 				}
 				dataOutput.write(eventHandlerBytes[i], 0, eventHandlerBytes[i].length);
 				dataOutput.close();
-				eventHandlerClassCache[newName] = defineClass.invoke(classLoader, byteOutput.toByteArray());
+				resourceCache.get(classLoader).put(newName, byteOutput.toByteArray());
+				handledClasses[newName] = true;
 			}
-			var handler = new eventHandlerClassCache[newName](func);
-			MinecraftForge.EVENT_BUS.register(handler);
+			var handler = new (classLoader.loadClass(newName).static)(func);
+			MinecraftForge.static.EVENT_BUS.register(handler);
+			vanilla.eventHandlers.push(handler);
 			return handler;
 		}
 		vanilla.unregisterEventHandler = function(handler) {
-				MinecraftForge.EVENT_BUS.unregister(handler);
+				var index = vanilla.eventHandlers.lastIndexOf(handler);
+				if ( index >= 0 ) {
+					vanilla.eventHandlers.splice(index, 1);
+				}
+				MinecraftForge.static.EVENT_BUS.unregister(handler);
 		}
 		var ServerTickEvent = classLoader.loadClass("cpw.mods.fml.common.gameevent.TickEvent$ServerTickEvent");
 		vanilla.runOnServerThread = function(func) {
@@ -371,7 +375,7 @@
 				if ( first ) {
 					first = false;
 					vanilla.unregisterEventHandler(handler);
-					func();
+					shell.wrapInExceptionPrinter(func)();
 				}
 			});
 		}

@@ -1,5 +1,7 @@
+"use strict";
+
 (function(){
-  debugUtils={};
+  var debugUtils={};
 
   var instrumentation = inst;
   
