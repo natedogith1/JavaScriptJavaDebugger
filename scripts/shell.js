@@ -69,19 +69,13 @@ var shell = {
 		escape = "0000".substr(escape.length) + escape;
 		return str.replace( RegExp("\\u" + escape + "(.)", "g"), "$1" );
 	},
-	wrapInExceptionPrinter: function(func) {
-		return function() {
-			try {
-				return func();
-			} catch( e ) {
-				var stack;
-				if ( e instanceof Error ) {
-					print(e.stack);
-				} else {
-					e.printStackTrace(new java.io.PrintWriter(context.getWriter()));
-					//print(e + "\n" + Java.type("jdk.nashorn.api.scripting.NashornException").getScriptStackString(e));
-				}
-			}
+	printException: function(e) {
+		var stack;
+		if ( e instanceof Error ) {
+			print(e.stack);
+		} else {
+			e.printStackTrace(new java.io.PrintWriter(context.getWriter()));
+			//print(e + "\n" + Java.type("jdk.nashorn.api.scripting.NashornException").getScriptStackString(e));
 		}
 	},
 }

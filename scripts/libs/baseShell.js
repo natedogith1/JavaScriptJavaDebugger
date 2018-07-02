@@ -35,15 +35,19 @@
 	}
 
 	baseShell.stringToFunction = function(str) {
-		return shell.wrapInExceptionPrinter(function(){
-			var tmp = eval;
-			// give eval a different name, so that it
-			// executes in the global context
-			var res = tmp(str);
-			if ( typeof res != "undefined" ) {
-				print(res);
+		return function(){
+			try {
+				var tmp = eval;
+				// give eval a different name, so that it
+				// executes in the global context
+				var res = tmp(str);
+				if ( typeof res != "undefined" ) {
+					print(res);
+				}
+			} catch(e) {
+				shell.printException(e);
 			}
-		})
+		}
 	}
 
 	return {baseShell: baseShell};

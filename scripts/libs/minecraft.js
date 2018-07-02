@@ -355,7 +355,18 @@
 				resourceCache.get(classLoader).put(newName, byteOutput.toByteArray());
 				handledClasses[newName] = true;
 			}
-			var handler = new (classLoader.loadClass(newName).static)(func);
+			var handler = new (classLoader.loadClass(newName).static)(function(event){
+				try {
+					func(event)
+				} catch(e) {
+					try {
+						shell.printException(e);
+					} catch (e2) {
+						print("Got exception while handling exception " + e2);
+					}
+					vanilla.unregisterEventHandler(handler);
+				}
+			});
 			MinecraftForge.static.EVENT_BUS.register(handler);
 			vanilla.eventHandlers.push(handler);
 			return handler;
@@ -375,7 +386,7 @@
 				if ( first ) {
 					first = false;
 					vanilla.unregisterEventHandler(handler);
-					shell.wrapInExceptionPrinter(func)();
+					func();
 				}
 			});
 		}
