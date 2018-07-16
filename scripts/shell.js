@@ -73,6 +73,8 @@ var shell = {
 		var stack;
 		if ( e instanceof Error ) {
 			print(e.stack);
+		} else if ( typeof e == "string" ) {
+			print("Got exception: " + e);
 		} else {
 			e.printStackTrace(new java.io.PrintWriter(context.getWriter()));
 			//print(e + "\n" + Java.type("jdk.nashorn.api.scripting.NashornException").getScriptStackString(e));

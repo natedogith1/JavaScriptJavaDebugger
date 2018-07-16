@@ -14,7 +14,7 @@
 		registerEventHandler: null, // registerEventHandler(eventClass, handler function, priority (defualt=NORMAL)), returns a handler instance
 		unregisterEventHandler: null, // given the result of registerEventHandler, unregisters the event handler
 		runOnServerThread: null, // runs a function on the server thread
-		eventHandlers = [], // all registered event handlers
+		eventHandlers: [], // all registered event handlers
 	};
 	var debugUtils = shell.loadLib("debugUtils");
 	var minecraftVersion;
@@ -38,11 +38,17 @@
 	var DimensionManager = debugUtils.findClass("net.minecraftforge.common.DimensionManager").static;
 	var ObjectToString = Java.type("java.lang.Object").class.getMethod("toString");
 	var Base64 = Java.type("java.util.Base64");
-	var ClassLoader = Java.type("java.lang.ClassLoader");
 	var DataOutputStream = Java.type("java.io.DataOutputStream");
 	var ByteArrayOutputStream = Java.type("java.io.ByteArrayOutputStream");
 	var byteArray = Java.type("byte[]");
-	var javaInt = Java.type("int");
+	var URLStreamHandler = Java.type("java.net.URLStreamHandler");
+	var IOException = Java.type("java.io.IOException");
+	var URL = Java.type("java.net.URL");
+	var URLConnection = Java.type("java.net.URLConnection");
+	var URLDecoder = Java.type("java.net.URLDecoder");
+	var ByteArrayInputStream = Java.type("java.io.ByteArrayInputStream");
+	var UUID = Java.type("java.util.UUID");
+	var URLClassLoader = Java.type("java.net.URLClassLoader");
 
 	var primitiveTypes = {};
 	primitiveTypes["undefined"] = true,
@@ -274,9 +280,38 @@
 			return vanilla.wrap(DimensionManager).getWorld(id);
 		}
 
-		var classLoader = MinecraftForge.getClassLoader();
-		var resourceCache = classLoader.getClass().getDeclaredField("resourceCache");
-		resourceCache.setAccessible(true);
+		// this is necessary because "throw new java.io.IOException()" causes the IOException to be wrapped in a jdk.nashorn.internal.runtime.ECMAException
+		var doThrow = new (Java.extend(URLClassLoader))(Java.to([
+			new java.net.URL("a","b",-1,"/", 
+				new (Java.extend(URLStreamHandler)){
+					openConnection: function(url){
+						return new (Java.extend(URLConnection))(url){
+							connect: function(){},
+							getInputStream: function(){
+								return new ByteArrayInputStream(
+									// compiled from
+									/*
+									public class Thrower {
+										public static void Throw(Throwable target) throws Throwable {
+											throw target;
+										}
+									}
+									*/
+									bytes = java.util.Base64.getDecoder().decode(
+										"yv66vgAAADQAEgoAAwAOBwAPBwAQAQAGPGluaXQ+AQADKClWAQAEQ29kZQEAD0xp" +
+										"bmVOdW1iZXJUYWJsZQEABVRocm93AQAYKExqYXZhL2xhbmcvVGhyb3dhYmxlOylW" +
+										"AQAKRXhjZXB0aW9ucwcAEQEAClNvdXJjZUZpbGUBAAxUaHJvd2VyLmphdmEMAAQA" +
+										"BQEAB1Rocm93ZXIBABBqYXZhL2xhbmcvT2JqZWN0AQATamF2YS9sYW5nL1Rocm93" +
+										"YWJsZQAhAAIAAwAAAAAAAgABAAQABQABAAYAAAAdAAEAAQAAAAUqtwABsQAAAAEA" +
+										"BwAAAAYAAQAAAAEACQAIAAkAAgAGAAAAGgABAAEAAAACKr8AAAABAAcAAAAGAAEA" +
+										"AAADAAoAAAAEAAEACwABAAwAAAACAA0="
+									)
+								);
+							}
+						}
+					}
+				}
+			)], "java.net.URL[]"), {}).loadClass("Thrower").static.Throw;
 
 		//compiled from this code, split on cpw.mods.fml.common.eventhandler.Event and eventHandlers.cpw.mods.fml.common.eventhandler.Event constants and the priority value
 		/*
@@ -321,8 +356,58 @@
 		for ( var i = 0; i < eventHandlerBytes.length; i++ ) {
 			eventHandlerBytes[i] = Base64.getDecoder().decode(eventHandlerBytes[i]);
 		}
-		var handledClasses = {}
+
+		var classLoader = MinecraftForge.getClassLoader();
 		var EventPriority = classLoader.loadClass("cpw.mods.fml.common.eventhandler.EventPriority").static;
+		var URLConnectionAdapter = Java.extend(URLConnection);
+		var baseURL;
+		var super_urlStreamHandler;
+		var urlStreamHandler = new (Java.extend(URLStreamHandler)){
+			openConnection: function(url) {
+				var fileName = URLDecoder.decode(url.getFile());
+				if ( ! fileName.startsWith(baseURL.getFile()) ) {
+					doThrow(new IOException("'" + filename + "' has wrong root"));
+				}
+				if ( ! fileName.endsWith(".class") ) {
+					doThrow(new IOException("'" + fileName + "' is not a .class file"));
+				}
+				var className = fileName.substring(baseURL.getFile().length(), fileName.length()-".class".length).replace('/','.');
+				if ( ! className.startsWith("eventHandlers.") ) {
+					doThrow(new IOException("'" + className + "' is not in the eventHandlers package"));
+				}
+				var remain = className.substring("eventHandlers.".length);
+				var priority = remain.substring(0, remain.indexOf('.'));
+				var eventName = remain.substring(priority.length()+1);
+
+				var internalThis = className.replace(/\./g, "/");
+				var internalTarget = eventName.replace(/\./g, "/");
+				var internalPriority = priority;
+
+				var byteOutput = new ByteArrayOutputStream();
+				var dataOutput = new DataOutputStream(byteOutput);
+				var i;
+				for ( i = 0; i < eventHandlerBytes.length - 1; i++ ) {
+						dataOutput.write(eventHandlerBytes[i], 0, eventHandlerBytes[i].length);
+						dataOutput.writeUTF(javaString.format(eventHandlerMidStrings[i], internalThis, internalTarget, internalPriority));
+				}
+				dataOutput.write(eventHandlerBytes[i], 0, eventHandlerBytes[i].length);
+				dataOutput.close();
+				var bytes = byteOutput.toByteArray();
+				byteOutput.close();
+				
+				return new URLConnectionAdapter(url){
+					connect: function(){},
+					getInputStream: function(){
+						return new ByteArrayInputStream(bytes);
+					}
+				}
+			}
+		}
+		super_urlStreamHandler = Java.super(urlStreamHandler);
+		baseURL = new URL(UUID.randomUUID().toString(), "", -1, "/", urlStreamHandler);
+		classLoader.addURL(baseURL);
+
+		var handledClasses = {}
 		vanilla.registerEventHandler = function(eventClass, func, priority) {
 			if ( classLoader.loadClass(eventClass.getName()) != eventClass ) {
 				throw "[" + eventClass.getName() + "] does not match the one returned from the class loader";
@@ -338,23 +423,6 @@
 				}
 			}
 			var newName = "eventHandlers." + priority +"." + eventClass.getName();
-			if ( ! (newName in handledClasses) ) {
-				var internalThis = newName.replace(/\./g, "/");
-				var internalTarget = eventClass.getName().replace(/\./g, "/");
-				var internalPriority = priority;
-
-				var byteOutput = new ByteArrayOutputStream();
-				var dataOutput = new DataOutputStream(byteOutput);
-				var i;
-				for ( var i = 0; i < eventHandlerBytes.length - 1; i++ ) {
-						dataOutput.write(eventHandlerBytes[i], 0, eventHandlerBytes[i].length);
-						dataOutput.writeUTF(javaString.format(eventHandlerMidStrings[i], internalThis, internalTarget, internalPriority));
-				}
-				dataOutput.write(eventHandlerBytes[i], 0, eventHandlerBytes[i].length);
-				dataOutput.close();
-				resourceCache.get(classLoader).put(newName, byteOutput.toByteArray());
-				handledClasses[newName] = true;
-			}
 			var handler = new (classLoader.loadClass(newName).static)(function(event){
 				try {
 					func(event)

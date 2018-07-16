@@ -7,10 +7,10 @@
   
   //because sometimes we need to recurse downwards
   debugUtils.findClass=function(name){
-    var clazz=instrumentation.getAllLoadedClasses();
-    for(i in clazz){
-      if(clazz[i].getName()==name){
-        return clazz[i]
+    var clazzes=instrumentation.getAllLoadedClasses();
+    for each (var clazz in clazzes){
+      if(clazz.getName()==name){
+        return clazz
       }
     }
   }
