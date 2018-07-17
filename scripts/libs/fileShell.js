@@ -212,7 +212,9 @@
 							// so re-open the pipe
 							resetFiles();
 						} else if ( curChar == 0x1B /*escape*/ ) {
-							codeThread.interrupt();
+                            if ( codeThread != null ) {
+    							codeThread.interrupt();
+                            }
 						} else if ( curChar == "\n".charCodeAt(0) ) {
 							if ( ! codeThread ) {
 								runFunction(resultShell.stringToFunction(curText.toString()));
@@ -226,6 +228,7 @@
 						}
 					}
 				});
+                inputThread.setName("javascript input thread");
 				inputThread.setDaemon(daemon);
 				inputThread.start();
 
